@@ -1,0 +1,35 @@
+# Local infrastructure for contributors who prefer Docker.
+# The primary dev setup on this machine uses PostgreSQL and Redis installed in WSL instead;
+# both paths expose the same ports and credentials, so .env works unchanged.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: workstack-postgres
+    environment:
+      POSTGRES_USER: workstack
+      POSTGRES_PASSWORD: workstack
+      POSTGRES_DB: workstack
+    ports:
+      - "5432:5432"
+    volumes:
+      - workstack-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workstack -d workstack"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: workstack-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  workstack-pg:

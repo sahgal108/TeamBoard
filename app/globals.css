@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* Design tokens. Tailwind v4 reads these via @theme:
+   bg-canvas, text-ink, border-line, bg-accent, text-status-review, font-display, ... */
+@theme {
+  --font-display: var(--font-display), "IBM Plex Sans", system-ui, sans-serif;
+  --font-sans: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-canvas: #f3f6f4;
+  --color-surface: #ffffff;
+  --color-ink: #17211d;
+  --color-ink-2: #4f5e58;
+  --color-ink-3: #7d8b85;
+  --color-line: #dbe3de;
+  --color-line-2: #ecf0ed;
+
+  --color-accent: #0b7a5c;
+  --color-accent-ink: #065a44;
+  --color-accent-soft: #e1f2ea;
+
+  --color-side: #0f1a16;
+  --color-side-ink: #c9d6d0;
+  --color-side-muted: #7d8f88;
+  --color-side-active: #1a2924;
+
+  --color-status-todo: #64748b;
+  --color-status-progress: #2563eb;
+  --color-status-review: #d97706;
+  --color-status-done: #0b7a5c;
+
+  --color-priority-low: #7d8b85;
+  --color-priority-medium: #2563eb;
+  --color-priority-high: #ea580c;
+  --color-priority-urgent: #dc2626;
+
+  --radius-card: 10px;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
