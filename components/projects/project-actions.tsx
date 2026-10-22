@@ -1,38 +1,40 @@
 "use client";
 
+import { DeleteOutlined, EditOutlined, TeamOutlined, UserAddOutlined } from "@ant-design/icons";
+import { App, Button, Flex, Form, Input, Modal, Popconfirm, Select, Table, Tag, Typography } from "antd";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
-import type { ProjectStatus } from "@/generated/prisma/enums";
+import { useState } from "react";
+import type { ProjectStatus } from "@/lib/db/enums";
 import { Avatar } from "@/components/ui/avatar";
-import { FormError, Modal } from "@/components/ui/modal";
+import { FormError } from "@/components/ui/form-error";
 import { UserSelect } from "@/components/ui/user-select";
 import { api, errorMessage } from "@/lib/client-api";
 import { PROJECT_STATUS_LABEL } from "@/lib/labels";
-import { btn, btnDanger, btnPrimary, btnSm, input, label, select, textarea } from "@/lib/ui";
 import type { ProjectSummary } from "@/services/project.service";
+import { layout, space, textStyle } from "@/lib/design-system";
 
 type Perms = { canEdit: boolean; canDelete: boolean; canAssignPm: boolean; canManageMembers: boolean };
 type Props = { project: ProjectSummary; permissions: Perms };
+type Values = { name: string; status: ProjectStatus; projectManagerId?: string | null; description?: string };
+type Member = ProjectSummary["members"][number];
 
 export function ProjectActions({ project, permissions }: Props) {
   const router = useRouter();
+  const { modal, message } = App.useApp();
   const [editOpen, setEditOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
-  const [name, setName] = useState(project.name);
-  const [description, setDescription] = useState(project.description ?? "");
-  const [status, setStatus] = useState<ProjectStatus>(project.status);
-  const [pmId, setPmId] = useState<string | null>(project.projectManager?.id ?? null);
   const [newMember, setNewMember] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const pmId = project.projectManager?.id ?? null;
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  async function save(values: Values) {
     setPending("save");
     setError(null);
     try {
-      const body: Record<string, unknown> = { name, description: description || null, status };
-      if (permissions.canAssignPm && pmId !== (project.projectManager?.id ?? null)) body.projectManagerId = pmId;
+      const body: Record<string, unknown> = { name: values.name, description: values.description || null, status: values.status };
+      const nextPm = values.projectManagerId ?? null;
+      if (permissions.canAssignPm && nextPm !== pmId) body.projectManagerId = nextPm;
       await api(`/api/projects/${project.id}`, { method: "PATCH", body });
       setEditOpen(false);
       router.refresh();
@@ -43,17 +45,22 @@ export function ProjectActions({ project, permissions }: Props) {
     }
   }
 
-  async function remove() {
-    if (!confirm(`Delete "${project.name}" and all ${project.taskCount} of its tasks? This cannot be undone.`)) return;
-    setPending("delete");
-    try {
-      await api(`/api/projects/${project.id}`, { method: "DELETE" });
-      router.push("/projects");
-      router.refresh();
-    } catch (err) {
-      alert(errorMessage(err));
-      setPending(null);
-    }
+  function remove() {
+    modal.confirm({
+      title: `Delete "${project.name}"?`,
+      content: `All ${project.taskCount} of its tasks go with it. This cannot be undone.`,
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await api(`/api/projects/${project.id}`, { method: "DELETE" });
+          router.push("/projects");
+          router.refresh();
+        } catch (err) {
+          message.error(errorMessage(err));
+        }
+      },
+    });
   }
 
   async function addMember() {
@@ -86,46 +93,112 @@ export function ProjectActions({ project, permissions }: Props) {
 
   return (
     <>
-      <button type="button" className={btn} onClick={() => setMembersOpen(true)}>Members · {project.members.length}</button>
-      {permissions.canEdit && <button type="button" className={btn} onClick={() => setEditOpen(true)}>Edit</button>}
-      {permissions.canDelete && <button type="button" className={btnDanger} onClick={remove} disabled={pending === "delete"}>Delete</button>}
+      <Button icon={<TeamOutlined />} onClick={() => { setError(null); setMembersOpen(true); }}>
+        Members · {project.members.length}
+      </Button>
+      {permissions.canEdit && (
+        <Button icon={<EditOutlined />} onClick={() => { setError(null); setEditOpen(true); }}>
+          Edit
+        </Button>
+      )}
+      {permissions.canDelete && (
+        <Button danger icon={<DeleteOutlined />} onClick={remove}>
+          Delete
+        </Button>
+      )}
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit project">
-        <form onSubmit={save} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5"><span className={label}>Name</span><input className={input} value={name} onChange={e => setName(e.target.value)} required minLength={2} maxLength={80} /></label>
-          <label className="flex flex-col gap-1.5"><span className={label}>Status</span>
-            <select className={select} value={status} onChange={e => setStatus(e.target.value as ProjectStatus)}>
-              {(Object.keys(PROJECT_STATUS_LABEL) as ProjectStatus[]).map(s => <option key={s} value={s}>{PROJECT_STATUS_LABEL[s]}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className={label}>Project manager {!permissions.canAssignPm && <span className="text-ink-3">· only company leadership can change this</span>}</span>
-            <UserSelect value={pmId} onChange={setPmId} placeholder="Unassigned" disabled={!permissions.canAssignPm} />
-          </label>
-          <label className="flex flex-col gap-1.5"><span className={label}>Description</span><textarea className={textarea} rows={3} value={description} onChange={e => setDescription(e.target.value)} maxLength={1000} /></label>
-          <FormError message={error} />
-          <div className="flex justify-end gap-2.5"><button type="button" className={btn} onClick={() => setEditOpen(false)}>Cancel</button><button type="submit" className={btnPrimary} disabled={pending === "save"}>{pending === "save" ? "Saving…" : "Save"}</button></div>
-        </form>
+      <Modal
+        open={editOpen}
+        title="Edit project"
+        okText="Save"
+        okButtonProps={{ htmlType: "submit", loading: pending === "save" }}
+        onCancel={() => setEditOpen(false)}
+        destroyOnHidden
+        modalRender={dom => (
+          <Form
+            layout="vertical"
+            requiredMark={false}
+           
+            initialValues={{ name: project.name, status: project.status, projectManagerId: pmId, description: project.description ?? "" }}
+            onFinish={save}
+          >
+            {dom}
+          </Form>
+        )}
+      >
+        <Form.Item name="name" label="Name" rules={[{ required: true, whitespace: true, min: 2, max: 80 }]}>
+          <Input maxLength={80} />
+        </Form.Item>
+        <Form.Item name="status" label="Status">
+          <Select options={(Object.keys(PROJECT_STATUS_LABEL) as ProjectStatus[]).map(s => ({ value: s, label: PROJECT_STATUS_LABEL[s] }))} />
+        </Form.Item>
+        <Form.Item
+          name="projectManagerId"
+          label="Project manager"
+          extra={permissions.canAssignPm ? undefined : "Only company leadership can change this."}
+        >
+          <UserSelect placeholder="Unassigned" disabled={!permissions.canAssignPm} />
+        </Form.Item>
+        <Form.Item name="description" label="Description">
+          <Input.TextArea rows={3} maxLength={1000} />
+        </Form.Item>
+        <FormError message={error} />
       </Modal>
 
-      <Modal open={membersOpen} onClose={() => setMembersOpen(false)} title="Project members" description="Members can see this project and its tasks. The team's members and the project manager can see it regardless.">
-        <ul className="flex flex-col">
-          {project.members.map(m => (
-            <li key={m.id} className="flex items-center gap-3 border-b border-line-2 py-2.5 last:border-b-0">
-              <Avatar name={m.name} />
-              <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-medium">{m.name}{m.id === project.projectManager?.id && <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">PM</span>}</div><div className="truncate text-xs text-ink-3">{m.email}</div></div>
-              {permissions.canManageMembers && m.id !== project.projectManager?.id && (
-                <button type="button" className={btnSm} onClick={() => removeMember(m.id)} disabled={pending !== null}>{pending === m.id ? "…" : "Remove"}</button>
-              )}
-            </li>
-          ))}
-          {project.members.length === 0 && <li className="py-6 text-center text-[13px] text-ink-3">No explicit members yet.</li>}
-        </ul>
+      <Modal open={membersOpen} title="Project members" footer={null} onCancel={() => setMembersOpen(false)} width={layout.modalWidth}>
+        <Typography.Paragraph type="secondary">
+          Members can see this project and its tasks. The team&apos;s members and the project manager can see it regardless.
+        </Typography.Paragraph>
+        <Table<Member>
+          rowKey="id"
+          size="small"
+          showHeader={false}
+          pagination={false}
+          dataSource={project.members}
+          locale={{ emptyText: "No explicit members yet." }}
+          columns={[
+            {
+              key: "person",
+              render: (_, m) => (
+                <Flex align="center" gap={space[3]}>
+                  <Avatar name={m.name} />
+                  <div className="min-w-0">
+                    <Typography.Text strong>{m.name}</Typography.Text>
+                    {m.id === pmId && <Tag color="success" style={{ marginInlineStart: space[2] }}>PM</Tag>}
+                    <Typography.Text type="secondary" ellipsis style={{ ...textStyle.caption, display: "block" }}>{m.email}</Typography.Text>
+                  </div>
+                </Flex>
+              ),
+            },
+            ...(permissions.canManageMembers
+              ? [
+                  {
+                    key: "remove",
+                    align: "right" as const,
+                    width: layout.actionColumnWidth,
+                    render: (_: unknown, m: Member) =>
+                      m.id === pmId ? null : (
+                        <Popconfirm title={`Remove ${m.name}?`} okText="Remove" okButtonProps={{ danger: true }} onConfirm={() => removeMember(m.id)}>
+                          <Button size="small" loading={pending === m.id} disabled={pending !== null && pending !== m.id}>
+                            Remove
+                          </Button>
+                        </Popconfirm>
+                      ),
+                  },
+                ]
+              : []),
+          ]}
+        />
         {permissions.canManageMembers && (
-          <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
-            <div className="flex gap-2"><UserSelect value={newMember} onChange={setNewMember} placeholder="Add a person…" exclude={project.members.map(m => m.id)} /><button type="button" className={btnPrimary} onClick={addMember} disabled={!newMember || pending !== null}>Add</button></div>
+          <Flex vertical gap={space[2]} style={{ marginTop: space[4] }}>
+            <Flex gap={space[2]}>
+              <UserSelect value={newMember} onChange={setNewMember} placeholder="Add a person…" exclude={project.members.map(m => m.id)} />
+              <Button type="primary" icon={<UserAddOutlined />} onClick={addMember} disabled={!newMember} loading={pending === "add"}>
+                Add
+              </Button>
+            </Flex>
             <FormError message={error} />
-          </div>
+          </Flex>
         )}
       </Modal>
     </>

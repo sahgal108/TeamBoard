@@ -1,0 +1,80 @@
+import type { ThemeConfig } from "antd";
+import { color, font, layout, radius, shadow, space } from "./design-system";
+
+/** Ant Design theme. Every value comes from lib/design-system.ts. */
+export const antdTheme: ThemeConfig = {
+  token: {
+    colorPrimary: color.brand.primary,
+    colorSuccess: color.feedback.success,
+    colorInfo: color.feedback.info,
+    colorWarning: color.feedback.warning,
+    colorError: color.feedback.danger,
+    colorLink: color.brand.primaryHover,
+    colorLinkHover: color.brand.primary,
+    colorText: color.neutral.text,
+    colorTextSecondary: color.neutral.textSecondary,
+    colorTextTertiary: color.neutral.textMuted,
+    colorTextDescription: color.neutral.textSecondary,
+    colorBorder: color.neutral.border,
+    colorBorderSecondary: color.neutral.borderSubtle,
+    colorBgLayout: color.neutral.canvas,
+    colorBgContainer: color.neutral.surface,
+
+    fontFamily: font.family.sans,
+    fontFamilyCode: font.family.mono,
+    fontSize: font.size.base,
+    fontSizeSM: font.size.sm,
+    fontSizeLG: font.size.lg,
+    fontSizeXL: font.size.xl,
+    fontSizeHeading1: font.size.display,
+    fontSizeHeading2: font.size["3xl"],
+    fontSizeHeading3: font.size["2xl"],
+    fontSizeHeading4: font.size.xl,
+    fontSizeHeading5: font.size.lg,
+    fontWeightStrong: font.weight.semibold,
+    lineHeight: font.lineHeight.normal,
+
+    borderRadius: radius.md,
+    borderRadiusSM: radius.sm,
+    borderRadiusLG: radius.lg,
+    borderRadiusXS: radius.sm,
+
+    padding: space[4],
+    paddingSM: space[3],
+    paddingXS: space[2],
+    paddingLG: space[6],
+    margin: space[4],
+    marginSM: space[3],
+    marginXS: space[2],
+    marginLG: space[6],
+
+    boxShadowTertiary: shadow.card,
+  },
+  components: {
+    Layout: {
+      siderBg: color.sidebar.background,
+      headerBg: color.neutral.surface,
+      bodyBg: color.neutral.canvas,
+      headerHeight: layout.headerHeight,
+      headerPadding: `0 ${layout.pagePadding}px`,
+    },
+    Menu: {
+      darkItemBg: color.sidebar.background,
+      darkSubMenuItemBg: color.sidebar.background,
+      darkItemColor: color.sidebar.text,
+      darkItemHoverBg: color.sidebar.backgroundActive,
+      darkItemSelectedBg: color.sidebar.backgroundActive,
+      darkGroupTitleColor: color.sidebar.textMuted,
+      itemBorderRadius: radius.md,
+    },
+    Table: {
+      headerBg: color.neutral.surface,
+      headerColor: color.neutral.textMuted,
+      headerSplitColor: "transparent",
+      rowHoverBg: color.neutral.surfaceHover,
+    },
+    Card: { headerFontSize: font.size.base },
+    Progress: { defaultColor: color.brand.primary, remainingColor: color.neutral.borderSubtle },
+    Statistic: { titleFontSize: font.size.md, contentFontSize: font.size["3xl"] },
+  },
+};

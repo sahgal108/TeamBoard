@@ -1,4 +1,4 @@
-import type { ProjectStatus, TaskPriority, TaskStatus } from "@/generated/prisma/enums";
+import type { ProjectStatus, TaskPriority, TaskStatus } from "@/lib/db/enums";
 
 export const TASK_STATUS_ORDER: TaskStatus[] = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"];
 

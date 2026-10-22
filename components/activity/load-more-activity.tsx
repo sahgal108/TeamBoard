@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { Button, Divider, Flex, Typography } from "antd";
+import { Fragment, useState } from "react";
 import { api, errorMessage } from "@/lib/client-api";
-import { btn } from "@/lib/ui";
 import type { ActivityItem, ActivityPage } from "@/services/activity.service";
 import { ActivityRow } from "./activity-feed";
+import { color, space } from "@/lib/design-system";
 
 type Props = { initialCursor: string | null; projectId?: string };
 
@@ -35,17 +36,20 @@ export function LoadMoreActivity({ initialCursor, projectId }: Props) {
   return (
     <>
       {items.map(i => (
-        <ActivityRow key={i.id} item={i} />
+        <Fragment key={i.id}>
+          <Divider style={{ margin: 0 }} />
+          <ActivityRow item={i} />
+        </Fragment>
       ))}
       {(cursor || error) && (
-        <div className="flex items-center gap-3 px-4 py-3">
+        <Flex align="center" gap={space[3]} style={{ padding: `${space[3]}px ${space[4]}px`, borderTop: `1px solid ${color.neutral.borderSubtle}` }}>
           {cursor && (
-            <button type="button" className={btn} onClick={more} disabled={pending}>
-              {pending ? "Loading…" : "Load more"}
-            </button>
+            <Button onClick={more} loading={pending}>
+              Load more
+            </Button>
           )}
-          {error && <span className="text-[13px] text-priority-urgent">{error}</span>}
-        </div>
+          {error && <Typography.Text type="danger">{error}</Typography.Text>}
+        </Flex>
       )}
     </>
   );

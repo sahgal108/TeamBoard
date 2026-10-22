@@ -5,7 +5,7 @@ export type CacheResult<T> = { value: T; hit: boolean };
 /**
  * Cache-aside. Redis problems are logged and treated as a miss, so the app degrades to
  * "slower" rather than "broken". Values are JSON; Dates come back as ISO strings, so cached
- * shapes are the API response shapes, not Prisma rows.
+ * shapes are the API response shapes, not database rows.
  */
 export async function getOrSet<T>(key: string, ttlSeconds: number, loader: () => Promise<T>): Promise<CacheResult<T>> {
   if (await ensureRedis()) {

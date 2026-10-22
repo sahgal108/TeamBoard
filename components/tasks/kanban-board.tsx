@@ -1,22 +1,23 @@
 "use client";
 
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { Alert, Avatar as AntAvatar, Badge, Card, Col, Flex, Row, Typography } from "antd";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import type { TaskStatus } from "@/generated/prisma/enums";
+import type { TaskStatus } from "@/lib/db/enums";
 import { Avatar } from "@/components/ui/avatar";
-import { KeyTag, PriorityTag } from "@/components/ui/badges";
+import { KeyTag, PriorityTag, TASK_STATUS_HEX } from "@/components/ui/badges";
 import { useProjectRealtime } from "@/hooks/use-project-realtime";
+import { avatarSize, color, font, layout, space, textStyle } from "@/lib/design-system";
 import { api, errorMessage } from "@/lib/client-api";
-import { dueLabel } from "@/lib/format";
+import { dueColor, dueLabel } from "@/lib/format";
 import { TASK_STATUS_LABEL, TASK_STATUS_ORDER } from "@/lib/labels";
 import { canTransition } from "@/lib/task-transitions";
 import type { TaskListItem } from "@/services/task.service";
 
 type Props = { projectId: string; tasks: TaskListItem[]; meId: string; canManage: boolean; isViewer: boolean };
 
-const COLUMN_DOT: Record<TaskStatus, string> = { TODO: "bg-status-todo", IN_PROGRESS: "bg-status-progress", IN_REVIEW: "bg-status-review", DONE: "bg-status-done" };
 
 function TaskCard({ task, draggable, dragging = false }: { task: TaskListItem; draggable: boolean; dragging?: boolean }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, disabled: !draggable });
@@ -25,17 +26,25 @@ function TaskCard({ task, draggable, dragging = false }: { task: TaskListItem; d
     <div
       ref={setNodeRef}
       {...(draggable ? { ...listeners, ...attributes } : {})}
-      className={`flex flex-col gap-2.5 rounded-card border border-line bg-surface px-3.5 py-3 shadow-[0_1px_2px_rgba(23,33,29,.04)] ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging && !dragging ? "opacity-40" : ""} ${dragging ? "rotate-1 shadow-lg" : ""}`}
+      className={`${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging && !dragging ? "opacity-40" : ""} ${dragging ? "rotate-1" : ""}`}
     >
-      <Link href={`/tasks/${task.id}`} className="text-[13.5px] font-medium leading-snug hover:text-accent" onPointerDown={e => e.stopPropagation()}>
-        {task.title}
-      </Link>
-      <div className="flex items-center gap-2 text-xs text-ink-3">
-        <KeyTag>{task.key}</KeyTag>
-        <PriorityTag priority={task.priority} />
-        <span className={due.tone === "overdue" ? "text-priority-urgent" : due.tone === "soon" ? "text-status-review" : ""}>{due.tone === "none" && !task.dueDate ? "" : due.text}</span>
-        <span className="ml-auto">{task.assignee ? <Avatar name={task.assignee.name} size={22} /> : <span className="grid size-[22px] place-items-center rounded-full border border-dashed border-line text-[9px]">—</span>}</span>
-      </div>
+      <Card size="small" hoverable={draggable} styles={{ body: { display: "flex", flexDirection: "column", gap: space[2] } }}>
+        <Link href={`/tasks/${task.id}`} className="text-base font-medium leading-snug text-ink hover:text-accent" onPointerDown={e => e.stopPropagation()}>
+          {task.title}
+        </Link>
+        <Flex align="center" gap={space[2]} wrap>
+          <KeyTag>{task.key}</KeyTag>
+          <PriorityTag priority={task.priority} />
+          {task.dueDate && (
+            <Typography.Text style={{ ...textStyle.caption, color: dueColor(due.tone) }} type={dueColor(due.tone) ? undefined : "secondary"}>
+              {due.text}
+            </Typography.Text>
+          )}
+          <span style={{ marginLeft: "auto" }}>
+            {task.assignee ? <Avatar name={task.assignee.name} size={avatarSize.sm} /> : <AntAvatar size={avatarSize.sm} style={{ background: "transparent", border: `1px dashed ${color.neutral.border}`, color: color.neutral.textMuted, fontSize: font.size.xs }}>—</AntAvatar>}
+          </span>
+        </Flex>
+      </Card>
     </div>
   );
 }
@@ -43,12 +52,15 @@ function TaskCard({ task, draggable, dragging = false }: { task: TaskListItem; d
 function Column({ status, tasks, meId, canManage, isViewer }: { status: TaskStatus; tasks: TaskListItem[]; meId: string; canManage: boolean; isViewer: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
-    <div ref={setNodeRef} className={`flex min-h-[200px] flex-col gap-2.5 rounded-xl p-1.5 transition-colors ${isOver ? "bg-accent-soft/60" : ""}`}>
-      <div className="flex items-center gap-2 px-1.5 py-1 text-[12.5px] font-semibold uppercase tracking-[0.04em] text-ink-2">
-        <i className={`size-2 rounded-full ${COLUMN_DOT[status]}`} />
-        {TASK_STATUS_LABEL[status]}
-        <span className="ml-auto font-mono text-xs font-medium text-ink-3">{tasks.length}</span>
-      </div>
+    <div
+      ref={setNodeRef}
+      className="flex flex-col gap-2 rounded-lg p-1.5 transition-colors"
+      style={{ minHeight: layout.boardColumnMinHeight, background: isOver ? color.brand.primarySoft : undefined }}
+    >
+      <Flex align="center" gap={space[2]} style={{ padding: `${space[1]}px ${space[1.5]}px` }}>
+        <Badge color={TASK_STATUS_HEX[status]} text={<Typography.Text strong type="secondary" style={textStyle.columnLabel}>{TASK_STATUS_LABEL[status]}</Typography.Text>} />
+        <Badge count={tasks.length} showZero color={color.neutral.borderSubtle} style={{ color: color.neutral.textSecondary, marginLeft: "auto" }} />
+      </Flex>
       {tasks.map(t => (
         <TaskCard key={t.id} task={t} draggable={!isViewer && (canManage || t.assignee?.id === meId)} />
       ))}
@@ -112,21 +124,23 @@ export function KanbanBoard({ projectId, tasks: serverTasks, meId, canManage, is
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <Flex vertical gap={space[3]} style={{ flex: 1, minHeight: 0 }}>
       {(notice || connected) && (
-        <div className="flex items-center gap-3 text-xs">
-          {notice && <span role="alert" className="rounded-md bg-[#fdf1df] px-2.5 py-1.5 text-status-review">{notice}</span>}
-          {connected && <span className="ml-auto inline-flex items-center gap-1.5 text-ink-3"><i className="size-1.5 rounded-full bg-accent" />Live updates on</span>}
-        </div>
+        <Flex align="center" gap={space[3]}>
+          {notice && <Alert type="warning" showIcon title={notice} closable={{ onClose: () => setNotice(null) }} />}
+          {connected && <Badge status="processing" text="Live updates on" style={{ marginLeft: "auto" }} />}
+        </Flex>
       )}
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActive(null)}>
-        <div className="grid flex-1 grid-cols-2 gap-4 xl:grid-cols-4">
+      <DndContext id={`board-${projectId}`} sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActive(null)}>
+        <Row gutter={space[4]} style={{ flex: 1 }}>
           {TASK_STATUS_ORDER.map(s => (
-            <Column key={s} status={s} tasks={byStatus[s]} meId={meId} canManage={canManage} isViewer={isViewer} />
+            <Col key={s} xs={24} md={12} xl={6}>
+              <Column status={s} tasks={byStatus[s]} meId={meId} canManage={canManage} isViewer={isViewer} />
+            </Col>
           ))}
-        </div>
+        </Row>
         <DragOverlay>{active ? <TaskCard task={active} draggable dragging /> : null}</DragOverlay>
       </DndContext>
-    </div>
+    </Flex>
   );
 }

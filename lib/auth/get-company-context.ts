@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
-import type { CompanyRole } from "@/generated/prisma/enums";
-import { prisma } from "@/lib/db/prisma";
+import type { CompanyRole } from "@/lib/db/enums";
+import { Company, CompanyMember } from "@/lib/db/models";
 import { ForbiddenError } from "@/lib/errors";
 import { getCurrentUser } from "./get-current-user";
 
@@ -23,17 +23,19 @@ export async function getCompanyContext(req?: NextRequest): Promise<CompanyConte
     throw new ForbiddenError("You are not a member of any company");
   }
 
-  const membership = await prisma.companyMember.findUnique({
-    where: { companyId_userId: { companyId: claims.activeCompanyId, userId: user.id } },
-    select: { id: true, role: true, company: { select: { id: true, name: true, slug: true } } },
+  const membership = await CompanyMember.findOne({
+    where: { companyId: claims.activeCompanyId, userId: user.id },
+    attributes: ["id", "role"],
+    include: [{ model: Company, as: "company", attributes: ["id", "name", "slug"] }],
   });
-  if (!membership) {
+  if (!membership?.company) {
     throw new ForbiddenError("You are no longer a member of this company");
   }
 
+  const { company } = membership;
   return {
     user,
-    company: membership.company,
+    company: { id: company.id, name: company.name, slug: company.slug },
     membership: { id: membership.id, role: membership.role },
   };
 }

@@ -1,6 +1,6 @@
 import type { ActivityItem } from "@/services/activity.service";
 import { TASK_STATUS_LABEL } from "./labels";
-import type { TaskStatus } from "@/generated/prisma/enums";
+import type { TaskStatus } from "@/lib/db/enums";
 
 export type ActivitySentence = { verb: string; object: string; extra?: string; href?: string };
 

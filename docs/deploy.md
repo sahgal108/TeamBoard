@@ -15,11 +15,11 @@ Three deployables, all free-tier friendly.
 2. Run migrations and seed from your machine against production once:
 
    ```bash
-   DATABASE_URL="postgresql://…" npx prisma migrate deploy
-   DATABASE_URL="postgresql://…" npx prisma db seed
+   DATABASE_URL="postgresql://…" npx sequelize-cli db:migrate
+   DATABASE_URL="postgresql://…" npm run db:seed
    ```
 
-   Prisma 7 reads `DATABASE_URL` through `prisma.config.ts`; no schema edit needed.
+   Both the app and `sequelize-cli` (via `db/config.cjs`) read `DATABASE_URL`; nothing else to configure.
 
 ## 2. Redis
 
@@ -29,7 +29,7 @@ Create an Upstash database and copy the `rediss://…` URL as `REDIS_URL`. iored
 
 Deploy the repository to Railway (or Fly/Render) as a Node service:
 
-- Build: `npm ci && npx prisma generate`
+- Build: `npm ci`
 - Start: `npx tsx realtime/server.ts`
 - Env: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` (must equal the app's), `NEXT_PUBLIC_APP_URL` (the Vercel URL, used as the CORS origin), `REALTIME_PORT` (the platform's `PORT`).
 
@@ -48,7 +48,7 @@ Import the repository. Framework preset: Next.js. Set environment variables:
 | `NEXT_PUBLIC_REALTIME_URL` | the relay URL from step 3 |
 | `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | `true` for the portfolio demo, `false` otherwise |
 
-The build script already runs `prisma generate` before `next build`.
+No code-generation step is needed before `next build`.
 
 ## 5. Smoke test
 

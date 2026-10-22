@@ -1,40 +1,61 @@
 @import "tailwindcss";
 
-/* Design tokens. Tailwind v4 reads these via @theme:
-   bg-canvas, text-ink, border-line, bg-accent, text-status-review, font-display, ... */
-@theme {
-  --font-display: var(--font-display), "IBM Plex Sans", system-ui, sans-serif;
-  --font-sans: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+/*
+ * Tailwind theme → design-system tokens. Values are NOT defined here: lib/design-system.ts
+ * is the source, rendered as --ds-* variables into <head> by app/layout.tsx.
+ * Defaults are cleared so only the design system's colours, sizes and radii exist.
+ */
+@theme inline {
+  --color-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
 
-  --color-canvas: #f3f6f4;
-  --color-surface: #ffffff;
-  --color-ink: #17211d;
-  --color-ink-2: #4f5e58;
-  --color-ink-3: #7d8b85;
-  --color-line: #dbe3de;
-  --color-line-2: #ecf0ed;
+  --font-sans: var(--ds-font-sans);
+  --font-display: var(--ds-font-display);
+  --font-mono: var(--ds-font-mono);
 
-  --color-accent: #0b7a5c;
-  --color-accent-ink: #065a44;
-  --color-accent-soft: #e1f2ea;
+  --spacing: var(--ds-spacing);
 
-  --color-side: #0f1a16;
-  --color-side-ink: #c9d6d0;
-  --color-side-muted: #7d8f88;
-  --color-side-active: #1a2924;
+  --text-xs: var(--ds-text-xs);
+  --text-sm: var(--ds-text-sm);
+  --text-md: var(--ds-text-md);
+  --text-base: var(--ds-text-base);
+  --text-lg: var(--ds-text-lg);
+  --text-xl: var(--ds-text-xl);
+  --text-2xl: var(--ds-text-2xl);
+  --text-3xl: var(--ds-text-3xl);
+  --text-display: var(--ds-text-display);
 
-  --color-status-todo: #64748b;
-  --color-status-progress: #2563eb;
-  --color-status-review: #d97706;
-  --color-status-done: #0b7a5c;
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --radius-full: var(--ds-radius-full);
 
-  --color-priority-low: #7d8b85;
-  --color-priority-medium: #2563eb;
-  --color-priority-high: #ea580c;
-  --color-priority-urgent: #dc2626;
+  --shadow-card: var(--ds-shadow-card);
+  --shadow-raised: var(--ds-shadow-raised);
 
-  --radius-card: 10px;
+  --color-white: var(--ds-color-neutral-white);
+  --color-transparent: transparent;
+
+  --color-canvas: var(--ds-color-neutral-canvas);
+  --color-surface: var(--ds-color-neutral-surface);
+  --color-surface-hover: var(--ds-color-neutral-surface-hover);
+  --color-ink: var(--ds-color-neutral-text);
+  --color-ink-2: var(--ds-color-neutral-text-secondary);
+  --color-ink-3: var(--ds-color-neutral-text-muted);
+  --color-line: var(--ds-color-neutral-border);
+  --color-line-2: var(--ds-color-neutral-border-subtle);
+
+  --color-accent: var(--ds-color-brand-primary);
+  --color-accent-ink: var(--ds-color-brand-primary-hover);
+  --color-accent-soft: var(--ds-color-brand-primary-soft);
+
+  --color-side: var(--ds-color-sidebar-background);
+  --color-side-active: var(--ds-color-sidebar-background-active);
+  --color-side-border: var(--ds-color-sidebar-border);
+  --color-side-ink: var(--ds-color-sidebar-text);
+  --color-side-muted: var(--ds-color-sidebar-text-muted);
 }
 
 :root {
@@ -43,4 +64,13 @@
 
 body {
   -webkit-font-smoothing: antialiased;
+}
+
+/* Ant Design headings use the display face; body text keeps the antd theme's sans. */
+h1.ant-typography,
+h2.ant-typography,
+h3.ant-typography,
+h4.ant-typography,
+.ant-statistic-content {
+  font-family: var(--ds-font-display);
 }

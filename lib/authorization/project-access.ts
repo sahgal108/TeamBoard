@@ -1,7 +1,7 @@
-import type { ProjectStatus } from "@/generated/prisma/enums";
 import type { Action, Facts } from "@/lib/auth/permissions";
 import type { CompanyContext } from "@/lib/auth/get-company-context";
-import { prisma } from "@/lib/db/prisma";
+import type { ProjectStatus } from "@/lib/db/enums";
+import { Project, ProjectMember, TeamMember } from "@/lib/db/models";
 import { NotFoundError } from "@/lib/errors";
 import { assertCan } from "./assert";
 
@@ -15,24 +15,31 @@ export type LoadedProject = {
   projectManagerId: string | null;
 };
 
-const projectSelect = { id: true, companyId: true, teamId: true, name: true, key: true, status: true, projectManagerId: true } as const;
+export const PROJECT_ATTRIBUTES = ["id", "companyId", "teamId", "name", "key", "status", "projectManagerId"] as const;
+
+export const toLoadedProject = (p: Project): LoadedProject => ({
+  id: p.id,
+  companyId: p.companyId,
+  teamId: p.teamId,
+  name: p.name,
+  key: p.key,
+  status: p.status,
+  projectManagerId: p.projectManagerId,
+});
 
 /** Tenant-scoped load. The companyId filter is inside the query, never compared afterwards. */
 export async function loadProjectOrThrow(ctx: CompanyContext, projectId: string): Promise<LoadedProject> {
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, companyId: ctx.company.id },
-    select: projectSelect,
-  });
+  const project = await Project.findOne({ where: { id: projectId, companyId: ctx.company.id }, attributes: [...PROJECT_ATTRIBUTES] });
   if (!project) throw new NotFoundError("Project");
-  return project;
+  return toLoadedProject(project);
 }
 
-/** One round trip for both membership facts. */
+/** Both membership facts in parallel. */
 export async function projectFacts(ctx: CompanyContext, project: Pick<LoadedProject, "id" | "teamId" | "projectManagerId">): Promise<Facts> {
   const userId = ctx.user.id;
   const [teamMember, projectMember] = await Promise.all([
-    prisma.teamMember.findUnique({ where: { teamId_userId: { teamId: project.teamId, userId } }, select: { id: true } }),
-    prisma.projectMember.findUnique({ where: { projectId_userId: { projectId: project.id, userId } }, select: { id: true } }),
+    TeamMember.findOne({ where: { teamId: project.teamId, userId }, attributes: ["id"] }),
+    ProjectMember.findOne({ where: { projectId: project.id, userId }, attributes: ["id"] }),
   ]);
   return {
     isProjectManager: project.projectManagerId === userId,

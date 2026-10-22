@@ -1,4 +1,4 @@
-import type { CompanyRole } from "@/generated/prisma/enums";
+import type { CompanyRole } from "@/lib/db/enums";
 
 const LABELS: Record<CompanyRole, string> = {
   CEO: "CEO · full access",

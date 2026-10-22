@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskPriority, TaskStatus } from "@/generated/prisma/enums";
+import { TaskPriority, TaskStatus } from "@/lib/db/enums";
 import { idSchema, nullableDate } from "./common";
 
 export const taskStatusSchema = z.enum(Object.values(TaskStatus) as [TaskStatus, ...TaskStatus[]]);

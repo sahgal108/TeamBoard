@@ -7,8 +7,10 @@ export async function requireCompanyContext(): Promise<CompanyContext> {
   try {
     return await getCompanyContext();
   } catch (err) {
-    if (err instanceof UnauthorizedError) redirect("/login");
-    if (err instanceof ForbiddenError) redirect("/login?reason=no-company");
+    // Both go through /api/auth/expired so the dead cookie is cleared; otherwise proxy.ts
+    // sends /login straight back here and the browser loops.
+    if (err instanceof UnauthorizedError) redirect("/api/auth/expired");
+    if (err instanceof ForbiddenError) redirect("/api/auth/expired?reason=no-company");
     throw err;
   }
 }

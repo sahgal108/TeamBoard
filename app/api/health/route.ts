@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db/prisma";
+import { sequelize } from "@/lib/db/sequelize";
 import { ensureRedis, redis } from "@/lib/redis/redis";
 
 type Check = { ok: true; latencyMs: number } | { ok: false; error: string };
@@ -16,7 +16,7 @@ async function timed(fn: () => Promise<unknown>): Promise<Check> {
 
 export async function GET() {
   const [postgres, redisCheck] = await Promise.all([
-    timed(() => prisma.$queryRaw`SELECT 1`),
+    timed(() => sequelize.query("SELECT 1")),
     timed(async () => {
       if (!(await ensureRedis())) throw new Error("not connected");
       const pong = await redis.ping();

@@ -14,7 +14,7 @@ import Redis from "ioredis";
 import { Server } from "socket.io";
 import { verifySession } from "@/lib/auth/jwt";
 import { can } from "@/lib/auth/permissions";
-import { prisma } from "@/lib/db/prisma";
+import { CompanyMember, Project, ProjectMember, TeamMember } from "@/lib/db/models";
 
 const port = Number(process.env.REALTIME_PORT ?? 4000);
 const redisUrl = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -48,13 +48,13 @@ io.use(async (socket, next) => {
 
 async function canReadProject(userId: string, companyId: string, projectId: string): Promise<boolean> {
   const [membership, project] = await Promise.all([
-    prisma.companyMember.findUnique({ where: { companyId_userId: { companyId, userId } }, select: { role: true } }),
-    prisma.project.findFirst({ where: { id: projectId, companyId }, select: { id: true, teamId: true, projectManagerId: true } }),
+    CompanyMember.findOne({ where: { companyId, userId }, attributes: ["role"] }),
+    Project.findOne({ where: { id: projectId, companyId }, attributes: ["id", "teamId", "projectManagerId"] }),
   ]);
   if (!membership || !project) return false;
   const [teamMember, projectMember] = await Promise.all([
-    prisma.teamMember.findUnique({ where: { teamId_userId: { teamId: project.teamId, userId } }, select: { id: true } }),
-    prisma.projectMember.findUnique({ where: { projectId_userId: { projectId: project.id, userId } }, select: { id: true } }),
+    TeamMember.findOne({ where: { teamId: project.teamId, userId }, attributes: ["id"] }),
+    ProjectMember.findOne({ where: { projectId: project.id, userId }, attributes: ["id"] }),
   ]);
   return can({ membership: { role: membership.role } }, "project:read", {
     isProjectManager: project.projectManagerId === userId,

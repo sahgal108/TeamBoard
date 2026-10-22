@@ -1,3 +1,5 @@
+import { color } from "./design-system";
+
 const DAY = 86_400_000;
 
 export function formatDate(iso: string | null | undefined, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }): string {
@@ -38,6 +40,13 @@ export function dueLabel(iso: string | null, status: string, now = Date.now()): 
   return { text, tone: "normal" };
 }
 
+/** Text color for a due-date tone; undefined means the default secondary text. */
+export function dueColor(tone: DueTone): string | undefined {
+  if (tone === "overdue") return color.feedback.danger;
+  if (tone === "soon") return color.feedback.warning;
+  return undefined;
+}
+
 export function initials(name: string): string {
   return name
     .trim()
@@ -49,10 +58,9 @@ export function initials(name: string): string {
 
 /** Stable avatar color from a name. */
 export function avatarColor(name: string): string {
-  const palette = ["#0b7a5c", "#1d4ed8", "#7c3aed", "#b45309", "#0e7490", "#be185d", "#4b5563", "#374151", "#15803d", "#9333ea"];
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return palette[h % palette.length];
+  return color.avatar[h % color.avatar.length];
 }
 
 export function pluralize(n: number, one: string, many = `${one}s`): string {

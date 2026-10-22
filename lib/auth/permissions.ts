@@ -1,4 +1,4 @@
-import type { CompanyRole } from "@/generated/prisma/enums";
+import type { CompanyRole } from "@/lib/db/enums";
 import type { CompanyContext } from "./get-company-context";
 
 /**
@@ -60,7 +60,7 @@ function manages(role: CompanyRole, f: Facts): boolean {
 }
 
 /**
- * Pure policy. No I/O, no Prisma, no async. Given the caller's company role and the loaded
+ * Pure policy. No I/O, no database, no async. Given the caller's company role and the loaded
  * facts, answers yes/no. Cross-tenant access never reaches this function: loaders return 404
  * before any policy question is asked.
  */

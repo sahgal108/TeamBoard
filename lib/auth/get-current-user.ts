@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/db/prisma";
+import { User } from "@/lib/db/models";
 import { UnauthorizedError } from "@/lib/errors";
 import { SESSION_COOKIE } from "./cookies";
 import { verifySession, type SessionClaims } from "./jwt";
@@ -23,12 +23,9 @@ export async function getCurrentUser(req?: NextRequest): Promise<CurrentUser> {
   const claims = await verifySession(await readSessionToken(req));
   if (!claims) throw new UnauthorizedError();
 
-  const user = await prisma.user.findUnique({
-    where: { id: claims.sub },
-    select: { id: true, name: true, email: true },
-  });
+  const user = await User.findByPk(claims.sub, { attributes: ["id", "name", "email"] });
   // The token was valid but the account is gone: treat exactly like no session.
   if (!user) throw new UnauthorizedError();
 
-  return { user, claims };
+  return { user: { id: user.id, name: user.name, email: user.email }, claims };
 }

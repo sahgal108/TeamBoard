@@ -1,13 +1,15 @@
 import { Suspense } from "react";
 import { SearchBox } from "@/components/search/search-box";
+import { Header, SkeletonInput } from "@/components/ui/antd";
+import { layout, zIndex } from "@/lib/design-system";
 
 export function Topbar() {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-7">
+    <Header className="flex items-center border-b border-line" style={{ position: "sticky", top: 0, zIndex: zIndex.header }}>
       {/* useSearchParams inside SearchBox needs a Suspense boundary */}
-      <Suspense fallback={<div className="h-[34px] w-[360px] rounded-lg border border-line bg-canvas" />}>
+      <Suspense fallback={<SkeletonInput active style={{ width: layout.searchWidth }} />}>
         <SearchBox />
       </Suspense>
-    </header>
+    </Header>
   );
 }

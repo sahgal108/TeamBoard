@@ -1,4 +1,4 @@
-import type { TaskStatus } from "@/generated/prisma/enums";
+import type { TaskStatus } from "@/lib/db/enums";
 
 /**
  * Allowed status moves. Shared by the service (authoritative, returns 400 INVALID_TRANSITION)

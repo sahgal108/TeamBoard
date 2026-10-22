@@ -1,6 +1,6 @@
 // Drops and recreates the public schema, then applies all migrations.
 //   node scripts/reset-db.mjs            → dev database (DATABASE_URL), then seeds
-// Non-interactive replacement for `prisma migrate reset`, which refuses to run without a TTY.
+// Use it to get back to a clean demo database.
 import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import pg from "pg";
@@ -27,6 +27,6 @@ for (const t of targets) {
   await client.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
   await client.end();
   console.log(`[reset-db] ${t.name}: schema dropped, applying migrations`);
-  run("npx", ["prisma", "migrate", "deploy"], t.url);
-  if (t.seed) run("npx", ["prisma", "db", "seed"], t.url);
+  run("npx", ["sequelize-cli", "db:migrate"], t.url);
+  if (t.seed) run("npx", ["tsx", "db/seed.ts"], t.url);
 }

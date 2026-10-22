@@ -1,21 +1,21 @@
 "use client";
 
+import { PlusOutlined } from "@ant-design/icons";
+import { Button, Form, Input, Modal, Typography } from "antd";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
-import { FormError, Modal } from "@/components/ui/modal";
+import { useState } from "react";
+import { FormError } from "@/components/ui/form-error";
 import { api, errorMessage } from "@/lib/client-api";
-import { btn, btnPrimary, input, label, textarea } from "@/lib/ui";
+
+type Values = { name: string; description?: string };
 
 export function CreateTeamDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function submit({ name, description }: Values) {
     setPending(true);
     setError(null);
     try {
@@ -32,17 +32,30 @@ export function CreateTeamDialog() {
 
   return (
     <>
-      <button type="button" className={btnPrimary} onClick={() => setOpen(true)}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+      <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
         New team
-      </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="New team" description="A team owns projects. Only company leadership can create one.">
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5"><span className={label}>Name</span><input className={input} value={name} onChange={e => setName(e.target.value)} required minLength={2} maxLength={60} autoFocus /></label>
-          <label className="flex flex-col gap-1.5"><span className={label}>Description <span className="text-ink-3">(optional)</span></span><textarea className={textarea} rows={2} value={description} onChange={e => setDescription(e.target.value)} maxLength={300} /></label>
-          <FormError message={error} />
-          <div className="flex justify-end gap-2.5"><button type="button" className={btn} onClick={() => setOpen(false)}>Cancel</button><button type="submit" className={btnPrimary} disabled={pending || name.trim().length < 2}>{pending ? "Creating…" : "Create team"}</button></div>
-        </form>
+      </Button>
+      <Modal
+        open={open}
+        title="New team"
+        okText="Create team"
+        okButtonProps={{ htmlType: "submit", loading: pending }}
+        onCancel={() => setOpen(false)}
+        destroyOnHidden
+        modalRender={dom => (
+          <Form layout="vertical" requiredMark={false} onFinish={submit}>
+            {dom}
+          </Form>
+        )}
+      >
+        <Typography.Paragraph type="secondary">A team owns projects. Only company leadership can create one.</Typography.Paragraph>
+        <Form.Item name="name" label="Name" rules={[{ required: true, whitespace: true, min: 2, max: 60 }]}>
+          <Input autoFocus maxLength={60} />
+        </Form.Item>
+        <Form.Item name="description" label="Description (optional)">
+          <Input.TextArea rows={2} maxLength={300} showCount />
+        </Form.Item>
+        <FormError message={error} />
       </Modal>
     </>
   );

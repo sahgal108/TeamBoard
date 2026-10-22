@@ -1,11 +1,12 @@
-import type { TaskPriority, TaskStatus } from "@/generated/prisma/enums";
+import { Op, literal, type FindAttributeOptions, type Includeable, type Transaction, type WhereOptions } from "sequelize";
 import type { CompanyContext } from "@/lib/auth/get-company-context";
 import { can } from "@/lib/auth/permissions";
 import { assertCompanyMember } from "@/lib/authorization/company-users";
 import { authorizeProject } from "@/lib/authorization/project-access";
 import { authorizeTask } from "@/lib/authorization/task-access";
 import { visibleTaskWhere } from "@/lib/authorization/visibility";
-import { prisma } from "@/lib/db/prisma";
+import type { TaskPriority, TaskStatus } from "@/lib/db/enums";
+import { Comment, Project, Task, User, sequelize } from "@/lib/db/models";
 import { ForbiddenError, InvalidTransitionError } from "@/lib/errors";
 import { publishProjectEvent } from "@/lib/realtime/publish";
 import { invalidate } from "@/lib/redis/cache";
@@ -13,6 +14,7 @@ import { cacheKeys } from "@/lib/redis/keys";
 import { TRANSITIONS, canTransition } from "@/lib/task-transitions";
 import type { CreateCommentInput, CreateTaskInput, TaskListQuery, UpdateTaskInput } from "@/validations/task.schema";
 import { listEntityActivity, recordActivity } from "./activity.service";
+import { nextTaskNumber } from "./project.service";
 
 // Status state machine lives in lib/task-transitions.ts so the board can explain an
 // impossible drop before making a request; the service remains the authority (400 INVALID_TRANSITION).
@@ -32,48 +34,50 @@ export type TaskListItem = {
   commentCount: number;
 };
 
-const listSelect = {
-  id: true, number: true, title: true, status: true, priority: true, dueDate: true, updatedAt: true,
-  project: { select: { id: true, name: true, key: true } },
-  assignee: { select: { id: true, name: true } },
-  _count: { select: { comments: true } },
-} as const;
+const LIST_ATTRIBUTES: FindAttributeOptions = [
+  "id", "number", "title", "status", "priority", "dueDate", "updatedAt",
+  [literal(`(SELECT COUNT(*) FROM "Comment" c WHERE c."taskId" = "Task"."id")`), "commentCount"],
+];
+const listInclude = (): Includeable[] => [
+  { model: Project, as: "project", attributes: ["id", "name", "key"] },
+  { model: User, as: "assignee", attributes: ["id", "name"] },
+];
 
-type ListRow = {
-  id: string; number: number; title: string; status: TaskStatus; priority: TaskPriority; dueDate: Date | null; updatedAt: Date;
-  project: { id: string; name: string; key: string }; assignee: { id: string; name: string } | null; _count: { comments: number };
-};
-
-const toListItem = (t: ListRow): TaskListItem => ({
+const toListItem = (t: Task): TaskListItem => ({
   id: t.id,
-  key: `${t.project.key}-${t.number}`,
+  key: `${t.project!.key}-${t.number}`,
   number: t.number,
   title: t.title,
   status: t.status,
   priority: t.priority,
   dueDate: t.dueDate?.toISOString() ?? null,
   updatedAt: t.updatedAt.toISOString(),
-  project: t.project,
-  assignee: t.assignee,
-  commentCount: t._count.comments,
+  project: { id: t.project!.id, name: t.project!.name, key: t.project!.key },
+  assignee: t.assignee ? { id: t.assignee.id, name: t.assignee.name } : null,
+  commentCount: Number(t.get("commentCount") ?? 0),
 });
+
+/** Reloads one task in list shape, optionally inside a transaction. */
+async function loadListItem(taskId: string, transaction?: Transaction): Promise<TaskListItem> {
+  const row = await Task.findByPk(taskId, { attributes: LIST_ATTRIBUTES, include: listInclude(), transaction, rejectOnEmpty: true });
+  return toListItem(row);
+}
 
 const cacheKeysFor = (companyId: string, projectId: string) => [cacheKeys.dashboard(companyId), cacheKeys.projectSummary(projectId)];
 
 /** Visibility in SQL; filters narrow further. */
 export async function listTasks(ctx: CompanyContext, q: TaskListQuery = {}): Promise<TaskListItem[]> {
-  const rows = await prisma.task.findMany({
-    where: {
-      AND: [
-        visibleTaskWhere(ctx),
-        q.projectId ? { projectId: q.projectId } : {},
-        q.status ? { status: q.status } : {},
-        q.assigneeId ? { assigneeId: q.assigneeId } : {},
-        q.mine ? { assigneeId: ctx.user.id } : {},
-      ],
-    },
-    orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }, { number: "asc" }],
-    select: listSelect,
+  const and: WhereOptions[] = [visibleTaskWhere(ctx)];
+  if (q.projectId) and.push({ projectId: q.projectId });
+  if (q.status) and.push({ status: q.status });
+  if (q.assigneeId) and.push({ assigneeId: q.assigneeId });
+  if (q.mine) and.push({ assigneeId: ctx.user.id });
+
+  const rows = await Task.findAll({
+    where: { [Op.and]: and },
+    attributes: LIST_ATTRIBUTES,
+    include: listInclude(),
+    order: [["status", "ASC"], ["priority", "DESC"], ["dueDate", "ASC"], ["number", "ASC"]],
   });
   return rows.map(toListItem);
 }
@@ -81,19 +85,16 @@ export async function listTasks(ctx: CompanyContext, q: TaskListQuery = {}): Pro
 export async function getTask(ctx: CompanyContext, taskId: string) {
   const { task, facts } = await authorizeTask(ctx, taskId, "task:read");
   const [row, activity] = await Promise.all([
-    prisma.task.findUniqueOrThrow({
-      where: { id: task.id },
-      select: {
-        ...listSelect,
-        description: true,
-        createdAt: true,
-        createdBy: { select: { id: true, name: true } },
-        assignee: { select: { id: true, name: true, email: true } },
-        comments: {
-          orderBy: { createdAt: "asc" },
-          select: { id: true, content: true, createdAt: true, user: { select: { id: true, name: true } } },
-        },
-      },
+    Task.findByPk(task.id, {
+      attributes: [...(LIST_ATTRIBUTES as unknown[]), "description", "createdAt"] as FindAttributeOptions,
+      include: [
+        { model: Project, as: "project", attributes: ["id", "name", "key"] },
+        { model: User, as: "assignee", attributes: ["id", "name", "email"] },
+        { model: User, as: "createdBy", attributes: ["id", "name"] },
+        { model: Comment, as: "comments", attributes: ["id", "content", "createdAt"], include: [{ model: User, as: "user", attributes: ["id", "name"] }] },
+      ],
+      order: [[{ model: Comment, as: "comments" }, "createdAt", "ASC"]],
+      rejectOnEmpty: true,
     }),
     listEntityActivity(ctx, "TASK", task.id),
   ]);
@@ -103,11 +104,16 @@ export async function getTask(ctx: CompanyContext, taskId: string) {
     ...toListItem(row),
     description: row.description,
     createdAt: row.createdAt.toISOString(),
-    createdBy: row.createdBy,
-    assignee: row.assignee,
-    comments: row.comments.map(c => ({ id: c.id, content: c.content, createdAt: c.createdAt.toISOString(), author: c.user })),
+    createdBy: { id: row.createdBy!.id, name: row.createdBy!.name },
+    assignee: row.assignee ? { id: row.assignee.id, name: row.assignee.name, email: row.assignee.email } : null,
+    comments: (row.comments ?? []).map(c => ({
+      id: c.id,
+      content: c.content,
+      createdAt: c.createdAt.toISOString(),
+      author: { id: c.user!.id, name: c.user!.name },
+    })),
     activity,
-    allowedTransitions: TRANSITIONS[row.status],
+    allowedTransitions: TRANSITIONS[row.status as TaskStatus],
     permissions: {
       canChangeStatus: can(ctx, "task:update_status", facts),
       canEdit: can(ctx, "task:edit", facts),
@@ -124,18 +130,14 @@ export async function createTask(ctx: CompanyContext, input: CreateTaskInput) {
   const { project } = await authorizeProject(ctx, input.projectId, "task:create");
   const assignee = input.assigneeId ? await assertCompanyMember(ctx, input.assigneeId, "Assignee") : null;
 
-  const task = await prisma.$transaction(async tx => {
+  const task = await sequelize.transaction(async transaction => {
     // Atomic per-project sequence: the increment returns the new counter value.
-    const { taskCounter } = await tx.project.update({
-      where: { id: project.id },
-      data: { taskCounter: { increment: 1 } },
-      select: { taskCounter: true },
-    });
-    const created = await tx.task.create({
-      data: {
+    const number = await nextTaskNumber(project.id, transaction);
+    const created = await Task.create(
+      {
         companyId: project.companyId, // copied from the parent, never from input
         projectId: project.id,
-        number: taskCounter,
+        number,
         title: input.title,
         description: input.description ?? null,
         priority: input.priority ?? "MEDIUM",
@@ -143,19 +145,29 @@ export async function createTask(ctx: CompanyContext, input: CreateTaskInput) {
         createdById: ctx.user.id,
         dueDate: input.dueDate ?? null,
       },
-      select: listSelect,
-    });
-    await recordActivity(tx, {
+      { transaction },
+    );
+    await recordActivity(transaction, {
       companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: created.id,
       projectId: project.id, teamId: project.teamId, action: "TASK_CREATED",
       metadata: { title: created.title, key: `${project.key}-${created.number}`, assigneeName: assignee?.name ?? null },
     });
-    return created;
+    return loadListItem(created.id, transaction);
   });
 
   await invalidate(...cacheKeysFor(ctx.company.id, project.id));
   void publishProjectEvent(project.id, { type: "TASK_CREATED", taskId: task.id, actorId: ctx.user.id });
-  return toListItem(task);
+  return task;
+}
+
+/** Applies the given column changes and returns the task in list shape, all inside `transaction`. */
+async function updateColumns(taskId: string, changes: Partial<Pick<Task, "title" | "description" | "priority" | "dueDate" | "status" | "assigneeId">>, transaction: Transaction) {
+  const row = await Task.findByPk(taskId, { transaction, rejectOnEmpty: true });
+  for (const [k, v] of Object.entries(changes)) {
+    if (v !== undefined) row.set(k as keyof typeof changes, v as never);
+  }
+  await row.save({ transaction });
+  return loadListItem(taskId, transaction);
 }
 
 export async function updateTask(ctx: CompanyContext, taskId: string, input: UpdateTaskInput) {
@@ -167,13 +179,9 @@ export async function updateTask(ctx: CompanyContext, taskId: string, input: Upd
     throw new ForbiddenError("Only the project manager, the team lead or company leadership can change the title or priority");
   }
 
-  const updated = await prisma.$transaction(async tx => {
-    const row = await tx.task.update({
-      where: { id: task.id },
-      data: { title: input.title, description: input.description, priority: input.priority, dueDate: input.dueDate },
-      select: listSelect,
-    });
-    await recordActivity(tx, {
+  const updated = await sequelize.transaction(async transaction => {
+    const row = await updateColumns(task.id, { title: input.title, description: input.description, priority: input.priority, dueDate: input.dueDate }, transaction);
+    await recordActivity(transaction, {
       companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: task.id,
       projectId: task.projectId, teamId: task.project.teamId, action: "TASK_UPDATED",
       metadata: { title: row.title, key: `${task.project.key}-${task.number}`, changed: Object.keys(input) },
@@ -183,17 +191,17 @@ export async function updateTask(ctx: CompanyContext, taskId: string, input: Upd
 
   await invalidate(...cacheKeysFor(ctx.company.id, task.projectId));
   void publishProjectEvent(task.projectId, { type: "TASK_UPDATED", taskId: task.id, actorId: ctx.user.id });
-  return toListItem(updated);
+  return updated;
 }
 
 export async function changeTaskStatus(ctx: CompanyContext, taskId: string, to: TaskStatus) {
   const { task } = await authorizeTask(ctx, taskId, "task:update_status");
-  if (task.status === to) return toListItem(await prisma.task.findUniqueOrThrow({ where: { id: task.id }, select: listSelect }));
+  if (task.status === to) return loadListItem(task.id);
   if (!canTransition(task.status, to)) throw new InvalidTransitionError(task.status, to);
 
-  const updated = await prisma.$transaction(async tx => {
-    const row = await tx.task.update({ where: { id: task.id }, data: { status: to }, select: listSelect });
-    await recordActivity(tx, {
+  const updated = await sequelize.transaction(async transaction => {
+    const row = await updateColumns(task.id, { status: to }, transaction);
+    await recordActivity(transaction, {
       companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: task.id,
       projectId: task.projectId, teamId: task.project.teamId, action: "TASK_STATUS_CHANGED",
       metadata: { title: task.title, key: `${task.project.key}-${task.number}`, from: task.status, to },
@@ -203,66 +211,69 @@ export async function changeTaskStatus(ctx: CompanyContext, taskId: string, to: 
 
   await invalidate(...cacheKeysFor(ctx.company.id, task.projectId));
   void publishProjectEvent(task.projectId, { type: "TASK_STATUS_CHANGED", taskId: task.id, from: task.status, to, actorId: ctx.user.id });
-  return toListItem(updated);
+  return updated;
 }
 
 export async function assignTask(ctx: CompanyContext, taskId: string, assigneeId: string | null) {
   const { task } = await authorizeTask(ctx, taskId, "task:assign");
   const assignee = assigneeId ? await assertCompanyMember(ctx, assigneeId, "Assignee") : null;
 
-  const updated = await prisma.$transaction(async tx => {
-    const row = await tx.task.update({ where: { id: task.id }, data: { assigneeId: assignee?.id ?? null }, select: listSelect });
-    await recordActivity(tx, {
+  const updated = await sequelize.transaction(async transaction => {
+    const row = await Task.findByPk(task.id, { transaction, rejectOnEmpty: true });
+    row.assigneeId = assignee?.id ?? null;
+    await row.save({ transaction });
+    await recordActivity(transaction, {
       companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: task.id,
       projectId: task.projectId, teamId: task.project.teamId, action: "TASK_ASSIGNED",
       metadata: { title: task.title, key: `${task.project.key}-${task.number}`, to: assignee?.id ?? null, toName: assignee?.name ?? null },
     });
-    return row;
+    return loadListItem(task.id, transaction);
   });
 
   await invalidate(...cacheKeysFor(ctx.company.id, task.projectId));
   void publishProjectEvent(task.projectId, { type: "TASK_ASSIGNED", taskId: task.id, assigneeId: assignee?.id ?? null, actorId: ctx.user.id });
-  return toListItem(updated);
+  return updated;
 }
 
 export async function deleteTask(ctx: CompanyContext, taskId: string) {
   const { task } = await authorizeTask(ctx, taskId, "task:delete");
-  await prisma.$transaction(async tx => {
-    await recordActivity(tx, {
+  await sequelize.transaction(async transaction => {
+    await recordActivity(transaction, {
       companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: task.id,
       projectId: task.projectId, teamId: task.project.teamId, action: "TASK_DELETED",
       metadata: { title: task.title, key: `${task.project.key}-${task.number}` },
     });
-    await tx.task.delete({ where: { id: task.id } });
+    await Task.destroy({ where: { id: task.id }, transaction });
   });
   await invalidate(...cacheKeysFor(ctx.company.id, task.projectId));
   void publishProjectEvent(task.projectId, { type: "TASK_DELETED", taskId: task.id, actorId: ctx.user.id });
 }
 
+const commentInclude = (): Includeable[] => [{ model: User, as: "user", attributes: ["id", "name"] }];
+const toCommentDto = (c: Comment) => ({ id: c.id, content: c.content, createdAt: c.createdAt.toISOString(), author: { id: c.user!.id, name: c.user!.name } });
+
 export async function listComments(ctx: CompanyContext, taskId: string) {
   const { task } = await authorizeTask(ctx, taskId, "task:read");
-  const rows = await prisma.comment.findMany({
+  const rows = await Comment.findAll({
     where: { taskId: task.id },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, content: true, createdAt: true, user: { select: { id: true, name: true } } },
+    attributes: ["id", "content", "createdAt"],
+    include: commentInclude(),
+    order: [["createdAt", "ASC"]],
   });
-  return rows.map(c => ({ id: c.id, content: c.content, createdAt: c.createdAt.toISOString(), author: c.user }));
+  return rows.map(toCommentDto);
 }
 
 export async function addComment(ctx: CompanyContext, taskId: string, input: CreateCommentInput) {
   const { task } = await authorizeTask(ctx, taskId, "comment:create");
-  const comment = await prisma.$transaction(async tx => {
-    const created = await tx.comment.create({
-      data: { companyId: task.companyId, taskId: task.id, userId: ctx.user.id, content: input.content },
-      select: { id: true, content: true, createdAt: true, user: { select: { id: true, name: true } } },
-    });
-    await recordActivity(tx, {
+  const comment = await sequelize.transaction(async transaction => {
+    const created = await Comment.create({ companyId: task.companyId, taskId: task.id, userId: ctx.user.id, content: input.content }, { transaction });
+    await recordActivity(transaction, {
       companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: task.id,
       projectId: task.projectId, teamId: task.project.teamId, action: "COMMENT_ADDED",
       metadata: { title: task.title, key: `${task.project.key}-${task.number}`, commentId: created.id },
     });
-    return created;
+    return Comment.findByPk(created.id, { attributes: ["id", "content", "createdAt"], include: commentInclude(), transaction, rejectOnEmpty: true });
   });
   void publishProjectEvent(task.projectId, { type: "COMMENT_ADDED", taskId: task.id, commentId: comment.id, actorId: ctx.user.id });
-  return { id: comment.id, content: comment.content, createdAt: comment.createdAt.toISOString(), author: comment.user };
+  return toCommentDto(comment);
 }

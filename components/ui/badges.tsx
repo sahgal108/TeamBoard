@@ -1,72 +1,47 @@
-import type { ProjectStatus, TaskPriority, TaskStatus } from "@/generated/prisma/enums";
+"use client";
+
+import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons";
+import { Badge, Tag } from "antd";
+import type { ProjectStatus, TaskPriority, TaskStatus } from "@/lib/db/enums";
+import { color } from "@/lib/design-system";
 import { PRIORITY_LABEL, PROJECT_STATUS_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 
-const TASK_STATUS_STYLE: Record<TaskStatus, string> = {
-  TODO: "text-status-todo bg-[#eef2f6]",
-  IN_PROGRESS: "text-status-progress bg-[#e4edff]",
-  IN_REVIEW: "text-status-review bg-[#fdf1df]",
-  DONE: "text-status-done bg-accent-soft",
-};
-const TASK_STATUS_DOT: Record<TaskStatus, string> = {
-  TODO: "bg-status-todo",
-  IN_PROGRESS: "bg-status-progress",
-  IN_REVIEW: "bg-status-review",
-  DONE: "bg-status-done",
-};
+// antd preset tag colors per status; the dot colors match the board columns.
+const TASK_STATUS_TAG: Record<TaskStatus, string> = { TODO: "default", IN_PROGRESS: "processing", IN_REVIEW: "warning", DONE: "success" };
+export const TASK_STATUS_HEX: Record<TaskStatus, string> = color.taskStatus;
 
 export function TaskStatusPill({ status }: { status: TaskStatus }) {
   return (
-    <span className={`inline-flex h-[22px] items-center gap-1.5 rounded-md px-2 text-[11.5px] font-medium ${TASK_STATUS_STYLE[status]}`}>
-      <i className={`size-1.5 rounded-full ${TASK_STATUS_DOT[status]}`} />
+    <Tag color={TASK_STATUS_TAG[status]} variant="filled">
       {TASK_STATUS_LABEL[status]}
-    </span>
+    </Tag>
   );
 }
 
 export function StatusDot({ status }: { status: TaskStatus }) {
-  return <i className={`inline-block size-2 rounded-full ${TASK_STATUS_DOT[status]}`} />;
+  return <Badge color={TASK_STATUS_HEX[status]} />;
 }
 
-const PROJECT_STATUS_STYLE: Record<ProjectStatus, string> = {
-  ACTIVE: "text-status-done bg-accent-soft",
-  PLANNED: "text-status-todo bg-[#eef2f6]",
-  COMPLETED: "text-status-progress bg-[#e4edff]",
-  ARCHIVED: "text-ink-3 bg-line-2",
-};
-const PROJECT_STATUS_DOT: Record<ProjectStatus, string> = {
-  ACTIVE: "bg-status-done",
-  PLANNED: "bg-status-todo",
-  COMPLETED: "bg-status-progress",
-  ARCHIVED: "bg-ink-3",
-};
+const PROJECT_STATUS_TAG: Record<ProjectStatus, string> = { ACTIVE: "success", PLANNED: "default", COMPLETED: "processing", ARCHIVED: "default" };
 
 export function ProjectStatusPill({ status }: { status: ProjectStatus }) {
   return (
-    <span className={`inline-flex h-[22px] items-center gap-1.5 rounded-md px-2 text-[11.5px] font-medium ${PROJECT_STATUS_STYLE[status]}`}>
-      <i className={`size-1.5 rounded-full ${PROJECT_STATUS_DOT[status]}`} />
+    <Tag color={PROJECT_STATUS_TAG[status]} variant="filled">
       {PROJECT_STATUS_LABEL[status]}
-    </span>
+    </Tag>
   );
 }
 
-const PRIORITY_STYLE: Record<TaskPriority, string> = {
-  LOW: "text-priority-low",
-  MEDIUM: "text-priority-medium",
-  HIGH: "text-priority-high",
-  URGENT: "text-priority-urgent",
-};
+const PRIORITY_TAG: Record<TaskPriority, string> = { LOW: "default", MEDIUM: "blue", HIGH: "orange", URGENT: "red" };
 
 export function PriorityTag({ priority }: { priority: TaskPriority }) {
   return (
-    <span className={`inline-flex items-center gap-1 text-[11.5px] font-medium ${PRIORITY_STYLE[priority]}`}>
-      <svg width="8" height="7" viewBox="0 0 8 7" aria-hidden="true" className={priority === "LOW" ? "rotate-180" : ""}>
-        <path d="M4 0 8 7H0z" fill="currentColor" />
-      </svg>
+    <Tag color={PRIORITY_TAG[priority]} variant="outlined" icon={priority === "LOW" ? <ArrowDownOutlined /> : <ArrowUpOutlined />}>
       {PRIORITY_LABEL[priority]}
-    </span>
+    </Tag>
   );
 }
 
 export function KeyTag({ children }: { children: string }) {
-  return <span className="font-mono text-[11.5px] text-ink-3">{children}</span>;
+  return <span className="font-mono text-xs text-ink-3">{children}</span>;
 }

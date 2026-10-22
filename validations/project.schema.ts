@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProjectStatus } from "@/generated/prisma/enums";
+import { ProjectStatus } from "@/lib/db/enums";
 import { idSchema } from "./common";
 
 export const projectStatusSchema = z.enum(Object.values(ProjectStatus) as [ProjectStatus, ...ProjectStatus[]]);

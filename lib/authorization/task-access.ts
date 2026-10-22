@@ -1,10 +1,10 @@
-import type { TaskPriority, TaskStatus } from "@/generated/prisma/enums";
 import type { Action, Facts } from "@/lib/auth/permissions";
 import type { CompanyContext } from "@/lib/auth/get-company-context";
-import { prisma } from "@/lib/db/prisma";
+import type { TaskPriority, TaskStatus } from "@/lib/db/enums";
+import { Project, Task } from "@/lib/db/models";
 import { NotFoundError } from "@/lib/errors";
 import { assertCan } from "./assert";
-import { projectFacts, type LoadedProject } from "./project-access";
+import { PROJECT_ATTRIBUTES, projectFacts, toLoadedProject, type LoadedProject } from "./project-access";
 
 export type LoadedTask = {
   id: string;
@@ -21,23 +21,24 @@ export type LoadedTask = {
 
 /** Tenant-scoped by the task's own denormalized companyId, and the parent project comes along. */
 export async function loadTaskOrThrow(ctx: CompanyContext, taskId: string): Promise<LoadedTask> {
-  const task = await prisma.task.findFirst({
+  const task = await Task.findOne({
     where: { id: taskId, companyId: ctx.company.id },
-    select: {
-      id: true,
-      companyId: true,
-      projectId: true,
-      number: true,
-      title: true,
-      status: true,
-      priority: true,
-      assigneeId: true,
-      createdById: true,
-      project: { select: { id: true, companyId: true, teamId: true, name: true, key: true, status: true, projectManagerId: true } },
-    },
+    attributes: ["id", "companyId", "projectId", "number", "title", "status", "priority", "assigneeId", "createdById"],
+    include: [{ model: Project, as: "project", attributes: [...PROJECT_ATTRIBUTES] }],
   });
-  if (!task) throw new NotFoundError("Task");
-  return task;
+  if (!task?.project) throw new NotFoundError("Task");
+  return {
+    id: task.id,
+    companyId: task.companyId,
+    projectId: task.projectId,
+    number: task.number,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    assigneeId: task.assigneeId,
+    createdById: task.createdById,
+    project: toLoadedProject(task.project),
+  };
 }
 
 export async function taskFacts(ctx: CompanyContext, task: LoadedTask): Promise<Facts> {

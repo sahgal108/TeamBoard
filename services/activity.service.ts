@@ -1,7 +1,7 @@
-import type { Prisma } from "@/generated/prisma/client";
+import { Op, type Transaction, type WhereOptions } from "sequelize";
 import type { CompanyContext } from "@/lib/auth/get-company-context";
 import { visibleActivityWhere } from "@/lib/authorization/visibility";
-import { prisma } from "@/lib/db/prisma";
+import { Activity, Project, User } from "@/lib/db/models";
 import { NotFoundError } from "@/lib/errors";
 import type { ActivityQuery } from "@/validations/activity.schema";
 
@@ -32,28 +32,30 @@ export type ActivityInput = {
   entityType: ActivityEntityType;
   entityId: string;
   action: ActivityAction;
-  metadata?: Prisma.InputJsonValue;
+  metadata?: Record<string, unknown>;
   projectId?: string | null;
   teamId?: string | null;
 };
 
 /**
- * The one place Activity rows are written. Takes the transaction client so the audit row
+ * The one place Activity rows are written. Takes the transaction so the audit row
  * commits or rolls back together with the mutation it describes.
  */
-export function recordActivity(tx: Prisma.TransactionClient, input: ActivityInput) {
-  return tx.activity.create({
-    data: {
+export function recordActivity(transaction: Transaction, input: ActivityInput) {
+  return Activity.create(
+    {
       companyId: input.companyId,
       userId: input.userId,
       entityType: input.entityType,
       entityId: input.entityId,
       action: input.action,
-      metadata: input.metadata,
+      // JSON round trip drops undefined values, as the old JSON column writer did.
+      metadata: input.metadata === undefined ? null : JSON.parse(JSON.stringify(input.metadata)),
       projectId: input.projectId ?? null,
       teamId: input.teamId ?? null,
     },
-  });
+    { transaction },
+  );
 }
 
 export type ActivityItem = {
@@ -85,18 +87,36 @@ function decodeCursor(raw: string | undefined): Cursor | null {
   }
 }
 
+const ITEM_ATTRIBUTES = ["id", "action", "entityType", "entityId", "metadata", "projectId", "teamId", "createdAt"];
+const ITEM_INCLUDE = [
+  { model: User, as: "user", attributes: ["id", "name"] },
+  { model: Project, as: "project", attributes: ["id", "name", "key"] },
+];
+
+const toItem = (r: Activity): ActivityItem => ({
+  id: r.id,
+  action: r.action as ActivityAction,
+  entityType: r.entityType as ActivityEntityType,
+  entityId: r.entityId,
+  metadata: r.metadata ?? null,
+  projectId: r.projectId,
+  teamId: r.teamId,
+  createdAt: r.createdAt.toISOString(),
+  actor: { id: r.user!.id, name: r.user!.name },
+  project: r.project ? { id: r.project.id, name: r.project.name, key: r.project.key } : null,
+});
+
 /**
  * Newest first, keyset-paginated on (createdAt, id). Visibility is applied in SQL via
  * visibleActivityWhere: leadership sees the company, everyone else their projects, teams
  * and own actions.
  */
 export async function listActivity(ctx: CompanyContext, query: ActivityQuery): Promise<ActivityPage> {
-  const where: Prisma.ActivityWhereInput = { AND: [visibleActivityWhere(ctx)] };
-  const and = where.AND as Prisma.ActivityWhereInput[];
+  const and: WhereOptions[] = [visibleActivityWhere(ctx)];
 
   if (query.projectId) {
     // Filtering by a project the caller cannot see must look like the project does not exist.
-    const project = await prisma.project.findFirst({ where: { id: query.projectId, companyId: ctx.company.id }, select: { id: true } });
+    const project = await Project.findOne({ where: { id: query.projectId, companyId: ctx.company.id }, attributes: ["id"] });
     if (!project) throw new NotFoundError("Project");
     and.push({ projectId: query.projectId });
   }
@@ -105,25 +125,15 @@ export async function listActivity(ctx: CompanyContext, query: ActivityQuery): P
   const cursor = decodeCursor(query.cursor);
   if (cursor) {
     const at = new Date(cursor.createdAt);
-    and.push({ OR: [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: cursor.id } }] });
+    and.push({ [Op.or]: [{ createdAt: { [Op.lt]: at } }, { createdAt: at, id: { [Op.lt]: cursor.id } }] });
   }
 
-  const rows = await prisma.activity.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: query.limit + 1,
-    select: {
-      id: true,
-      action: true,
-      entityType: true,
-      entityId: true,
-      metadata: true,
-      projectId: true,
-      teamId: true,
-      createdAt: true,
-      user: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true, key: true } },
-    },
+  const rows = await Activity.findAll({
+    where: { [Op.and]: and },
+    attributes: ITEM_ATTRIBUTES,
+    include: ITEM_INCLUDE,
+    order: [["createdAt", "DESC"], ["id", "DESC"]],
+    limit: query.limit + 1,
   });
 
   const hasMore = rows.length > query.limit;
@@ -131,44 +141,19 @@ export async function listActivity(ctx: CompanyContext, query: ActivityQuery): P
   const last = page[page.length - 1];
 
   return {
-    items: page.map(r => ({
-      id: r.id,
-      action: r.action as ActivityAction,
-      entityType: r.entityType as ActivityEntityType,
-      entityId: r.entityId,
-      metadata: (r.metadata as Record<string, unknown> | null) ?? null,
-      projectId: r.projectId,
-      teamId: r.teamId,
-      createdAt: r.createdAt.toISOString(),
-      actor: r.user,
-      project: r.project,
-    })),
+    items: page.map(toItem),
     nextCursor: hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null,
   };
 }
 
 /** Per-entity trail (task drawer, project activity tab). Caller must have authorized the entity. */
 export async function listEntityActivity(ctx: CompanyContext, entityType: ActivityEntityType, entityId: string, limit = 50): Promise<ActivityItem[]> {
-  const rows = await prisma.activity.findMany({
+  const rows = await Activity.findAll({
     where: { companyId: ctx.company.id, entityType, entityId },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit,
-    select: {
-      id: true, action: true, entityType: true, entityId: true, metadata: true, projectId: true, teamId: true, createdAt: true,
-      user: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true, key: true } },
-    },
+    attributes: ITEM_ATTRIBUTES,
+    include: ITEM_INCLUDE,
+    order: [["createdAt", "DESC"], ["id", "DESC"]],
+    limit,
   });
-  return rows.map(r => ({
-    id: r.id,
-    action: r.action as ActivityAction,
-    entityType: r.entityType as ActivityEntityType,
-    entityId: r.entityId,
-    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
-    projectId: r.projectId,
-    teamId: r.teamId,
-    createdAt: r.createdAt.toISOString(),
-    actor: r.user,
-    project: r.project,
-  }));
+  return rows.map(toItem);
 }

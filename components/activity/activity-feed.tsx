@@ -1,34 +1,41 @@
+import { Divider, Flex } from "antd";
 import Link from "next/link";
+import { Fragment } from "react";
 import { Avatar } from "@/components/ui/avatar";
+import { EmptyState, Text } from "@/components/ui/antd";
 import { describeActivity } from "@/lib/activity-text";
 import { relativeTime } from "@/lib/format";
 import type { ActivityItem } from "@/services/activity.service";
+import { space, textStyle } from "@/lib/design-system";
 
 export function ActivityRow({ item, showProject = true }: { item: ActivityItem; showProject?: boolean }) {
   const s = describeActivity(item);
-  const object = s.href ? <Link href={s.href} className="font-medium text-ink hover:text-accent">{s.object}</Link> : <span className="font-medium text-ink">{s.object}</span>;
+  const object = s.href ? <Link href={s.href} className="font-medium">{s.object}</Link> : <Text strong>{s.object}</Text>;
   const where = [showProject ? item.project?.name : null, relativeTime(item.createdAt)].filter(Boolean).join(" · ");
   return (
-    <div className="flex gap-3 border-b border-line-2 px-4 py-3 text-[13px] last:border-b-0">
+    <Flex gap={space[3]} style={{ padding: `${space[3]}px ${space[4]}px` }}>
       <Avatar name={item.actor.name} />
       <div className="min-w-0">
-        <div className="text-ink-2">
-          <span className="font-medium text-ink">{item.actor.name}</span> {s.verb} {object}
+        <Text type="secondary">
+          <Text strong>{item.actor.name}</Text> {s.verb} {object}
           {s.extra ? ` ${s.extra}` : ""}
-        </div>
-        <div className="mt-0.5 text-xs text-ink-3">{where}</div>
+        </Text>
+        <Text type="secondary" style={{ ...textStyle.caption, display: "block" }}>{where}</Text>
       </div>
-    </div>
+    </Flex>
   );
 }
 
 export function ActivityFeed({ items, showProject = true, empty = "No activity yet." }: { items: ActivityItem[]; showProject?: boolean; empty?: string }) {
-  if (items.length === 0) return <div className="px-4 py-8 text-center text-[13px] text-ink-3">{empty}</div>;
+  if (items.length === 0) return <EmptyState description={empty} style={{ padding: `${space[6]}px 0` }} />;
   return (
-    <div className="flex flex-col">
-      {items.map(i => (
-        <ActivityRow key={i.id} item={i} showProject={showProject} />
+    <Flex vertical>
+      {items.map((i, idx) => (
+        <Fragment key={i.id}>
+          {idx > 0 && <Divider style={{ margin: 0 }} />}
+          <ActivityRow item={i} showProject={showProject} />
+        </Fragment>
       ))}
-    </div>
+    </Flex>
   );
 }

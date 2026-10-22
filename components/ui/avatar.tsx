@@ -1,32 +1,38 @@
+"use client";
+
+import { Avatar as AntAvatar, Tooltip } from "antd";
 import { avatarColor, initials } from "@/lib/format";
+import { avatarSize, font } from "@/lib/design-system";
 
-type Props = { name: string; size?: number; className?: string; title?: string };
+type Props = { name: string; size?: number; title?: string };
 
-export function Avatar({ name, size = 28, className = "", title }: Props) {
+export function Avatar({ name, size = avatarSize.md, title }: Props) {
   return (
-    <span
-      title={title ?? name}
-      className={`grid shrink-0 place-items-center rounded-full font-semibold text-white ${className}`}
-      style={{ width: size, height: size, background: avatarColor(name), fontSize: Math.max(9, Math.round(size * 0.38)) }}
-    >
-      {initials(name)}
-    </span>
+    <Tooltip title={title ?? name}>
+      <AntAvatar size={size} style={{ background: avatarColor(name), flexShrink: 0, fontSize: size >= avatarSize.lg ? font.size.lg : font.size.xs, fontWeight: font.weight.semibold }}>
+        {initials(name)}
+      </AntAvatar>
+    </Tooltip>
   );
 }
 
-export function AvatarStack({ names, size = 24, max = 5 }: { names: string[]; size?: number; max?: number }) {
-  const shown = names.slice(0, max);
-  const rest = names.length - shown.length;
+export function AvatarStack({ names, size = avatarSize.sm, max = 5 }: { names: string[]; size?: number; max?: number }) {
   return (
-    <span className="flex items-center">
-      {shown.map((n, i) => (
-        <Avatar key={`${n}-${i}`} name={n} size={size} className={`ring-2 ring-canvas ${i > 0 ? "-ml-1.5" : ""}`} />
+    <AntAvatar.Group size={size} max={{ count: max, style: { fontSize: font.size.xs } }}>
+      {names.map((n, i) => (
+        <Avatar key={`${n}-${i}`} name={n} size={size} />
       ))}
-      {rest > 0 && (
-        <span className="-ml-1.5 grid place-items-center rounded-full bg-line-2 text-[10px] font-medium text-ink-2 ring-2 ring-canvas" style={{ width: size, height: size }}>
-          +{rest}
-        </span>
-      )}
+    </AntAvatar.Group>
+  );
+}
+
+/** Avatar beside a name, or a muted "Unassigned". */
+export function PersonCell({ name, size = avatarSize.sm, empty = "Unassigned" }: { name: string | null | undefined; size?: number; empty?: string }) {
+  if (!name) return <span className="text-ink-3">{empty}</span>;
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Avatar name={name} size={size} />
+      {name}
     </span>
   );
 }

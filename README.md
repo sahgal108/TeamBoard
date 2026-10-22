@@ -6,12 +6,12 @@ Multi-tenant project and team management: **companies** contain **teams**, teams
 
 ## Stack
 
-Next.js 16 (App Router, `proxy.ts`) · React 19 · TypeScript · Tailwind v4 · Prisma 7 + PostgreSQL · Redis (ioredis) · Socket.IO · Zod · jose
+Next.js 16 (App Router, `proxy.ts`) · React 19 · TypeScript · Tailwind v4 · Ant Design 6 · Sequelize 6 + PostgreSQL · Redis (ioredis) · Socket.IO · Zod · jose
 
 ## Architecture
 
 ```
-Browser ──HTTP──▶ Next.js route handlers ──▶ services ──▶ Prisma ──▶ PostgreSQL
+Browser ──HTTP──▶ Next.js route handlers ──▶ services ──▶ Sequelize ──▶ PostgreSQL
    │                    │                       │  └──▶ Redis (cache-aside, exact-key DEL)
    │                    │                       └─────▶ Redis PUBLISH project:{id}
    └──WebSocket──▶ realtime/server.ts (Socket.IO) ◀── Redis PSUBSCRIBE project:*
@@ -27,7 +27,7 @@ Browser ──HTTP──▶ Next.js route handlers ──▶ services ──▶ 
 | 3. Load the resource **with `companyId` inside the query** | `lib/authorization/*-access.ts` | 404 |
 | 4. Gather facts: PM? team member? project member? assignee? | same | — |
 | 5. `can(ctx, action, facts)` — pure function, 19 actions | `lib/auth/permissions.ts` | 403 (or 404 if the resource is not visible at all) |
-| 6. Service: `prisma.$transaction([mutation, activity.create])` → `invalidate(keys)` → `publishProjectEvent` | `services/*` | — |
+| 6. Service: `sequelize.transaction(t => mutation + recordActivity(t))` → `invalidate(keys)` → `publishProjectEvent` | `services/*` | — |
 
 **Cross-tenant and out-of-scope resources are 404, never 403.** A project the caller cannot see looks exactly like one that does not exist, whether it belongs to another company or sits outside their scope in this one.
 
@@ -49,8 +49,8 @@ Requirements: Node 22.12+ (`.nvmrc`), PostgreSQL and Redis on localhost.
 
 ```bash
 cp .env.example .env          # set JWT_SECRET (64 hex chars)
-npm install                    # also generates the Prisma client
-npm run db:migrate             # or: node scripts/reset-db.mjs (drop + migrate + seed)
+npm install
+npm run db:migrate             # sequelize-cli; or npm run db:reset (drop + migrate + seed)
 npm run db:seed                # Acme Technologies + Globex Corp demo data
 npm run dev                    # http://localhost:3000
 npm run dev:realtime           # Socket.IO relay on :4000, separate terminal

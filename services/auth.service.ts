@@ -1,7 +1,7 @@
-import type { CompanyRole } from "@/generated/prisma/enums";
 import { signSession } from "@/lib/auth/jwt";
 import { verifyPassword } from "@/lib/auth/password";
-import { prisma } from "@/lib/db/prisma";
+import type { CompanyRole } from "@/lib/db/enums";
+import { Company, CompanyMember, User } from "@/lib/db/models";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import type { LoginInput } from "@/validations/auth.schema";
 
@@ -14,21 +14,18 @@ export type LoginResult = {
   activeCompanyId: string | null;
 };
 
+const withCompany = { model: Company, as: "company", attributes: ["id", "name", "slug"] };
+
+const toSummary = (m: CompanyMember): CompanySummary => ({ id: m.company!.id, name: m.company!.name, slug: m.company!.slug, role: m.role });
+
 async function listCompanies(userId: string): Promise<CompanySummary[]> {
-  const rows = await prisma.companyMember.findMany({
-    where: { userId },
-    orderBy: { createdAt: "asc" },
-    select: { role: true, company: { select: { id: true, name: true, slug: true } } },
-  });
-  return rows.map(r => ({ ...r.company, role: r.role }));
+  const rows = await CompanyMember.findAll({ where: { userId }, attributes: ["role"], include: [withCompany], order: [["createdAt", "ASC"]] });
+  return rows.map(toSummary);
 }
 
 /** Verifies credentials and issues a session. The first company joined becomes the active one. */
 export async function login(input: LoginInput): Promise<LoginResult> {
-  const user = await prisma.user.findUnique({
-    where: { email: input.email },
-    select: { id: true, name: true, email: true, passwordHash: true },
-  });
+  const user = await User.findOne({ where: { email: input.email }, attributes: ["id", "name", "email", "passwordHash"] });
 
   // Always run the comparison so unknown emails cost the same time as wrong passwords.
   const ok = await verifyPassword(input.password, user?.passwordHash);
@@ -43,14 +40,11 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 
 /** Re-issues the session for another company the user belongs to. Non-members get 403. */
 export async function switchCompany(userId: string, companyId: string): Promise<{ token: string; company: CompanySummary }> {
-  const membership = await prisma.companyMember.findUnique({
-    where: { companyId_userId: { companyId, userId } },
-    select: { role: true, company: { select: { id: true, name: true, slug: true } } },
-  });
-  if (!membership) throw new ForbiddenError("You are not a member of that company");
+  const membership = await CompanyMember.findOne({ where: { companyId, userId }, attributes: ["role"], include: [withCompany] });
+  if (!membership?.company) throw new ForbiddenError("You are not a member of that company");
 
   const token = await signSession({ sub: userId, activeCompanyId: companyId });
-  return { token, company: { ...membership.company, role: membership.role } };
+  return { token, company: toSummary(membership) };
 }
 
 export { listCompanies };
