@@ -542,6 +542,7 @@ Open http://localhost:3000.
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Unit and integration tests (Vitest); `test:unit`, `test:integration` run one suite |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:migrate:undo` | Revert the last migration |
 | `npm run db:seed` | Load demo data (truncates first) |
@@ -584,6 +585,7 @@ Password for all: `Password123!`
 | `NEXT_PUBLIC_APP_URL` | Yes | `http://localhost:3000` | App origin; allowed CORS origin for sockets |
 | `NEXT_PUBLIC_REALTIME_URL` | Yes | `http://localhost:4000` | Where the browser connects for live updates |
 | `REALTIME_PORT` | No | `4000` | Port for the Socket.IO relay |
+| `DATABASE_URL_TEST` | For tests | `postgresql://.../teamboard_test` | Integration tests only; the name must end in `_test`, since it is wiped |
 | `GEMINI_API_KEY` | No | from Google AI Studio | Enables AI summaries; without it the AI UI is hidden |
 | `AI_MODEL` | No | `gemini-flash-lite-latest` | First model tried |
 | `AI_FALLBACK_MODELS` | No | `gemini-flash-latest` | Comma-separated; tried when a model is retired, rate limited or overloaded |
@@ -685,4 +687,3 @@ Natural next steps, each a straightforward extension of the existing pipeline:
 - Similar past tasks as examples for task breakdown (vector search with pgvector), filtered by the same visibility rules
 - Full-text search on PostgreSQL (`tsvector`)
 - Rate limiting on sign-in
-- Automated test suite and CI

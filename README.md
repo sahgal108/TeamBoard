@@ -1,5 +1,7 @@
 # TeamBoard
 
+[![CI](https://github.com/sahgal108/TaskBoard/actions/workflows/ci.yml/badge.svg)](https://github.com/sahgal108/TaskBoard/actions/workflows/ci.yml)
+
 Multi-tenant project and team management: **companies** contain **teams**, teams contain **projects**, projects contain **tasks**. Hierarchical role-based and resource-level authorization is enforced in the query layer on every request, with Redis cache-aside, an append-only activity log written in the same transaction as each change, and real-time project boards over Socket.IO.
 
 > The interesting problem is not task management. It is that every mutation flows through one pipeline that resolves the resource *inside the caller's tenant*, checks role and membership, mutates and logs atomically, invalidates cache and fans out an event.
@@ -74,6 +76,19 @@ All use the password `Password123!`.
 | dev2@acme.test | Member | User Platform |
 | viewer@acme.test | Viewer | Payment Service, read only |
 | ceo@globex.test | CEO of **Globex Corp** | a different tenant entirely |
+
+## Tests
+
+```bash
+npm test                   # everything
+npm run test:unit          # pure logic, no services needed
+npm run test:integration   # needs PostgreSQL and Redis
+```
+
+- **Unit:** the `can()` policy for every role and action, the task state machine, and the AI provider (model fallback, schema validation, untrusted-text wrapping) against a stubbed `fetch`.
+- **Integration:** run the real services against `DATABASE_URL_TEST` (its name must end in `_test`; it is wiped) and Redis db 15, reseeded per test. They cover tenant isolation (404 across companies and outside one's scope), who may read each summary and break a task down, that summaries only contain their own project's tasks and ignore keys the model invents, rate limits and token budgets, and that subtask creation is all or nothing. A fake provider stands in for Gemini, so no key or network is needed.
+
+CI runs lint, type check and the full suite on every push against PostgreSQL 16 and Redis 7.
 
 ## Demo script
 

@@ -12,7 +12,11 @@
     "db:migrate": "sequelize-cli db:migrate",
     "db:reset": "node scripts/reset-db.mjs",
     "db:seed": "tsx db/seed.ts",
-    "db:migrate:undo": "sequelize-cli db:migrate:undo"
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
@@ -48,7 +52,8 @@
     "sequelize-cli": "^6.6.5",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.5"
   },
   "description": "Multi-tenant project and team management platform",
   "engines": {
