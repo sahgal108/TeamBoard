@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "db:migrate": "sequelize-cli db:migrate",
     "db:reset": "node scripts/reset-db.mjs",
     "db:seed": "tsx db/seed.ts",
