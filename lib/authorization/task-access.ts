@@ -16,6 +16,7 @@ export type LoadedTask = {
   priority: TaskPriority;
   assigneeId: string | null;
   createdById: string;
+  parentId: string | null;
   project: LoadedProject;
 };
 
@@ -23,7 +24,7 @@ export type LoadedTask = {
 export async function loadTaskOrThrow(ctx: CompanyContext, taskId: string): Promise<LoadedTask> {
   const task = await Task.findOne({
     where: { id: taskId, companyId: ctx.company.id },
-    attributes: ["id", "companyId", "projectId", "number", "title", "status", "priority", "assigneeId", "createdById"],
+    attributes: ["id", "companyId", "projectId", "number", "title", "status", "priority", "assigneeId", "createdById", "parentId"],
     include: [{ model: Project, as: "project", attributes: [...PROJECT_ATTRIBUTES] }],
   });
   if (!task?.project) throw new NotFoundError("Task");
@@ -37,6 +38,7 @@ export async function loadTaskOrThrow(ctx: CompanyContext, taskId: string): Prom
     priority: task.priority,
     assigneeId: task.assigneeId,
     createdById: task.createdById,
+    parentId: task.parentId,
     project: toLoadedProject(task.project),
   };
 }

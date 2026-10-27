@@ -17,6 +17,7 @@ export function describeActivity(a: ActivityItem): ActivitySentence {
 
   switch (a.action) {
     case "TASK_CREATED":
+      if (str(m.parentKey)) return { verb: "created", object: taskName, extra: `as a subtask of ${m.parentKey}${m.aiAssisted ? " (from AI suggestions)" : ""}`, href: taskHref };
       return { verb: "created", object: taskName, extra: str(m.assigneeName) ? `and assigned it to ${m.assigneeName}` : undefined, href: taskHref };
     case "TASK_UPDATED":
       return { verb: "edited", object: taskName, href: taskHref };

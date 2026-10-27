@@ -1,7 +1,7 @@
 "use client";
 
 import { DeleteOutlined, EditOutlined, SendOutlined } from "@ant-design/icons";
-import { App, Button, Card, Col, DatePicker, Descriptions, Flex, Form, Input, Modal, Row, Select, Space, Timeline, Typography } from "antd";
+import { App, Button, Card, Col, DatePicker, Descriptions, Flex, Form, Input, Modal, Progress, Row, Select, Space, Timeline, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { useState } from "react";
 import type { TaskPriority, TaskStatus } from "@/lib/db/enums";
 import { PageHeader } from "@/components/layout/page-header";
 import { PRIORITY_OPTIONS } from "@/components/tasks/create-task-dialog";
+import { SubtaskComposer } from "@/components/tasks/subtask-composer";
 import { EmptyState } from "@/components/ui/antd";
 import { Avatar, PersonCell } from "@/components/ui/avatar";
 import { KeyTag, PriorityTag, TaskStatusPill } from "@/components/ui/badges";
@@ -72,6 +73,7 @@ export function TaskDetail({ task, meId }: Props) {
   };
 
   const dueTextColor = dueColor(due.tone);
+  const subtasksDone = task.subtasks.filter(s => s.status === "DONE").length;
 
   return (
     <main className="flex flex-1 flex-col gap-5 p-7">
@@ -84,6 +86,11 @@ export function TaskDetail({ task, meId }: Props) {
             <TaskStatusPill status={task.status} />
             <PriorityTag priority={task.priority} />
             <span>Created by {task.createdBy.name} · {formatDate(task.createdAt)}</span>
+            {task.parent && (
+              <span>
+                Part of <Link href={`/tasks/${task.parent.id}`}>{task.parent.key} {task.parent.title}</Link>
+              </span>
+            )}
           </Space>
         }
         actions={
@@ -105,6 +112,29 @@ export function TaskDetail({ task, meId }: Props) {
                 <Typography.Text type="secondary">No description yet.</Typography.Text>
               )}
             </Card>
+
+            {(task.subtasks.length > 0 || p.canAddSubtasks) && (
+              <Card
+                title={<span style={SECTION_TITLE}>Subtasks · {subtasksDone} / {task.subtasks.length} done</span>}
+                extra={p.canAddSubtasks && <SubtaskComposer taskId={task.id} taskKey={task.key} priority={task.priority} canBreakDown={p.canBreakDown} />}
+              >
+                {task.subtasks.length > 0 ? (
+                  <Flex vertical gap={space[3]}>
+                    <Progress percent={Math.round((subtasksDone / task.subtasks.length) * 100)} size="small" showInfo={false} style={{ margin: 0 }} />
+                    {task.subtasks.map(s => (
+                      <Flex key={s.id} align="center" gap={space[3]} wrap>
+                        <KeyTag>{s.key}</KeyTag>
+                        <Link href={`/tasks/${s.id}`} className="font-medium" style={{ flex: 1, minWidth: 0 }}>{s.title}</Link>
+                        <TaskStatusPill status={s.status} />
+                        <PersonCell name={s.assignee?.name} size={avatarSize.xs} />
+                      </Flex>
+                    ))}
+                  </Flex>
+                ) : (
+                  <EmptyState description={p.canBreakDown ? "No subtasks yet. Break it down with AI or add them yourself." : "No subtasks yet."} />
+                )}
+              </Card>
+            )}
 
             <Card title={<span style={SECTION_TITLE}>Comments · {task.comments.length}</span>}>
               <Flex vertical gap={space[3]}>

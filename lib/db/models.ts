@@ -106,12 +106,16 @@ export class Task extends Model<InferAttributes<Task>, InferCreationAttributes<T
   declare assigneeId: CreationOptional<string | null>;
   declare createdById: string;
   declare dueDate: CreationOptional<Date | null>;
+  /** Set on subtasks only. Always a top-level task in the same project. */
+  declare parentId: CreationOptional<string | null>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
   declare project?: NonAttribute<Project>;
   declare assignee?: NonAttribute<User | null>;
   declare createdBy?: NonAttribute<User>;
   declare comments?: NonAttribute<Comment[]>;
+  declare parent?: NonAttribute<Task | null>;
+  declare subtasks?: NonAttribute<Task[]>;
 }
 
 export class Comment extends Model<InferAttributes<Comment>, InferCreationAttributes<Comment>> {
@@ -204,6 +208,7 @@ Task.init(
     assigneeId: fk(true),
     createdById: fk(),
     dueDate: { type: DataTypes.DATE, allowNull: true },
+    parentId: fk(true),
     ...timestamps,
   },
   { sequelize, tableName: "Task" },
@@ -250,6 +255,8 @@ Task.belongsTo(Project, { as: "project", foreignKey: "projectId" });
 Task.belongsTo(User, { as: "assignee", foreignKey: "assigneeId" });
 Task.belongsTo(User, { as: "createdBy", foreignKey: "createdById" });
 Task.hasMany(Comment, { as: "comments", foreignKey: "taskId" });
+Task.belongsTo(Task, { as: "parent", foreignKey: "parentId" });
+Task.hasMany(Task, { as: "subtasks", foreignKey: "parentId" });
 Comment.belongsTo(User, { as: "user", foreignKey: "userId" });
 
 Activity.belongsTo(User, { as: "user", foreignKey: "userId" });

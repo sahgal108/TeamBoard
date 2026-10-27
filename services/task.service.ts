@@ -1,5 +1,6 @@
 import { Op, literal, type FindAttributeOptions, type Includeable, type Transaction, type WhereOptions } from "sequelize";
 import type { CompanyContext } from "@/lib/auth/get-company-context";
+import { aiEnabled } from "@/lib/ai/provider";
 import { can } from "@/lib/auth/permissions";
 import { assertCompanyMember } from "@/lib/authorization/company-users";
 import { authorizeProject } from "@/lib/authorization/project-access";
@@ -7,12 +8,12 @@ import { authorizeTask } from "@/lib/authorization/task-access";
 import { visibleTaskWhere } from "@/lib/authorization/visibility";
 import type { TaskPriority, TaskStatus } from "@/lib/db/enums";
 import { Comment, Project, Task, User, sequelize } from "@/lib/db/models";
-import { ForbiddenError, InvalidTransitionError } from "@/lib/errors";
+import { ForbiddenError, InvalidTransitionError, ValidationError } from "@/lib/errors";
 import { publishProjectEvent } from "@/lib/realtime/publish";
 import { invalidate } from "@/lib/redis/cache";
 import { cacheKeys } from "@/lib/redis/keys";
 import { TRANSITIONS, canTransition } from "@/lib/task-transitions";
-import type { CreateCommentInput, CreateTaskInput, TaskListQuery, UpdateTaskInput } from "@/validations/task.schema";
+import type { CreateCommentInput, CreateSubtasksInput, CreateTaskInput, TaskListQuery, UpdateTaskInput } from "@/validations/task.schema";
 import { listEntityActivity, recordActivity } from "./activity.service";
 import { nextTaskNumber } from "./project.service";
 
@@ -84,7 +85,7 @@ export async function listTasks(ctx: CompanyContext, q: TaskListQuery = {}): Pro
 
 export async function getTask(ctx: CompanyContext, taskId: string) {
   const { task, facts } = await authorizeTask(ctx, taskId, "task:read");
-  const [row, activity] = await Promise.all([
+  const [row, activity, parent, subtasks] = await Promise.all([
     Task.findByPk(task.id, {
       attributes: [...(LIST_ATTRIBUTES as unknown[]), "description", "createdAt"] as FindAttributeOptions,
       include: [
@@ -97,9 +98,19 @@ export async function getTask(ctx: CompanyContext, taskId: string) {
       rejectOnEmpty: true,
     }),
     listEntityActivity(ctx, "TASK", task.id),
+    // Separate queries: a second hasMany include would multiply rows with the comments join.
+    task.parentId ? Task.findOne({ where: { id: task.parentId, companyId: ctx.company.id }, attributes: ["id", "number", "title"] }) : null,
+    Task.findAll({
+      where: { parentId: task.id, companyId: ctx.company.id },
+      attributes: ["id", "number", "title", "status"],
+      include: [{ model: User, as: "assignee", attributes: ["id", "name"] }],
+      order: [["number", "ASC"]],
+    }),
   ]);
 
   const manages = can(ctx, "task:assign", facts);
+  const key = (n: number) => `${task.project.key}-${n}`;
+  const topLevel = !task.parentId;
   return {
     ...toListItem(row),
     description: row.description,
@@ -113,6 +124,8 @@ export async function getTask(ctx: CompanyContext, taskId: string) {
       author: { id: c.user!.id, name: c.user!.name },
     })),
     activity,
+    parent: parent ? { id: parent.id, key: key(parent.number), title: parent.title } : null,
+    subtasks: subtasks.map(s => ({ id: s.id, key: key(s.number), title: s.title, status: s.status, assignee: s.assignee ? { id: s.assignee.id, name: s.assignee.name } : null })),
     allowedTransitions: TRANSITIONS[row.status as TaskStatus],
     permissions: {
       canChangeStatus: can(ctx, "task:update_status", facts),
@@ -122,6 +135,9 @@ export async function getTask(ctx: CompanyContext, taskId: string) {
       canAssign: manages,
       canDelete: can(ctx, "task:delete", facts),
       canComment: can(ctx, "comment:create", facts),
+      /** Subtasks are one level deep, so only a top-level task can get them. */
+      canAddSubtasks: topLevel && can(ctx, "task:create", facts),
+      canBreakDown: topLevel && aiEnabled() && can(ctx, "ai:breakdown", facts),
     },
   };
 }
@@ -233,6 +249,47 @@ export async function assignTask(ctx: CompanyContext, taskId: string, assigneeId
   await invalidate(...cacheKeysFor(ctx.company.id, task.projectId));
   void publishProjectEvent(task.projectId, { type: "TASK_ASSIGNED", taskId: task.id, assigneeId: assignee?.id ?? null, actorId: ctx.user.id });
   return updated;
+}
+
+/**
+ * Creates several subtasks under one top-level task, all or none: one transaction, each with
+ * its own number and TASK_CREATED activity. Same rights as creating a task in the project.
+ */
+export async function createSubtasks(ctx: CompanyContext, parentId: string, input: CreateSubtasksInput) {
+  const { task: parent } = await authorizeTask(ctx, parentId, "task:create");
+  if (parent.parentId) throw new ValidationError(undefined, "Subtasks can only be added to a top-level task");
+  const parentKey = `${parent.project.key}-${parent.number}`;
+
+  const created = await sequelize.transaction(async transaction => {
+    const items: TaskListItem[] = [];
+    for (const draft of input.subtasks) {
+      const number = await nextTaskNumber(parent.projectId, transaction);
+      const row = await Task.create(
+        {
+          companyId: parent.companyId,
+          projectId: parent.projectId,
+          parentId: parent.id,
+          number,
+          title: draft.title,
+          description: draft.description ?? null,
+          priority: draft.priority ?? "MEDIUM",
+          createdById: ctx.user.id,
+        },
+        { transaction },
+      );
+      await recordActivity(transaction, {
+        companyId: ctx.company.id, userId: ctx.user.id, entityType: "TASK", entityId: row.id,
+        projectId: parent.projectId, teamId: parent.project.teamId, action: "TASK_CREATED",
+        metadata: { title: row.title, key: `${parent.project.key}-${number}`, parentKey, aiAssisted: input.aiAssisted || undefined },
+      });
+      items.push(await loadListItem(row.id, transaction));
+    }
+    return items;
+  });
+
+  await invalidate(...cacheKeysFor(ctx.company.id, parent.projectId));
+  for (const t of created) void publishProjectEvent(parent.projectId, { type: "TASK_CREATED", taskId: t.id, actorId: ctx.user.id });
+  return created;
 }
 
 export async function deleteTask(ctx: CompanyContext, taskId: string) {

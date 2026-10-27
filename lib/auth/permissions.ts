@@ -24,7 +24,8 @@ export type Action =
   | "task:delete"
   | "comment:create"
   | "activity:read_company"
-  | "ai:summarize";
+  | "ai:summarize"
+  | "ai:breakdown";
 
 /** Facts about the caller's relationship to the resource. Loaded by lib/authorization/*, never here. */
 export type Facts = {
@@ -91,6 +92,8 @@ export function can(ctx: PolicyContext, action: Action, facts: Facts = {}): bool
     case "project:manage_members":
     case "task:create":
     case "task:assign":
+    // Suggesting subtasks is only useful to someone who can then create them.
+    case "ai:breakdown":
       return full || manages(role, facts);
 
     // Whoever runs the project, plus the person the task is assigned to. Viewers never.

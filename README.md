@@ -85,6 +85,7 @@ All use the password `Password123!`.
 6. **Real-time:** two windows (Amit and Neha) on the same board. Amit moves a card; Neha's board updates without a refresh. Path: DB transaction → Activity row → `PUBLISH project:{id}` → Socket.IO room.
 7. **Cache:** call `/api/dashboard` twice and watch the `x-cache` header go `MISS` → `HIT`; change a task; next call is `MISS`.
 8. **AI summary** (needs `GEMINI_API_KEY`): open a project's Summary tab for done / in progress / looks blocked. The lists come from SQL; the model only writes the wording, so it cannot invent or leak a task. As the PM, the Engineering team page has no team summary, because she cannot see all of that team's projects.
+9. **Task breakdown** (needs `GEMINI_API_KEY`): as the PM, open PAY-8 and click **Break down with AI**. Edit or untick the suggestions, then create them; they get the next project numbers and link back to PAY-8. As a Member the buttons are absent and `POST /api/tasks/:id/breakdown` returns 403.
 
 ## Cache benchmark
 

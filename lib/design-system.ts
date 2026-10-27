@@ -174,6 +174,10 @@ export const layout = {
   actionColumnWidth: 96,
   progressColumnWidth: 200,
   modalWidth: 520,
+  /** Modals holding an editable list (e.g. reviewing suggested subtasks). */
+  wideModalWidth: 720,
+  /** Priority picker inside a list row. */
+  prioritySelectWidth: 120,
   /** Sign-in page: headline column on the dark panel, and the form column. */
   heroTextMaxWidth: 460,
   authFormMaxWidth: 520,

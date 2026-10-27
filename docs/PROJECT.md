@@ -28,7 +28,7 @@ This document describes the product, the architecture, the data model, the secur
 18. [Configuration](#18-configuration)
 19. [Deployment](#19-deployment)
 20. [Conventions](#20-conventions)
-21. [AI summaries](#21-ai-summaries)
+21. [AI features](#21-ai-features)
 22. [Scope and future work](#22-scope-and-future-work)
 
 ---
@@ -185,7 +185,7 @@ All ids are cuid2 strings. Tables use PascalCase names and camelCase columns. Ti
 | `TeamMember` | `teamId`, `userId` | Unique `(teamId, userId)` |
 | `Project` | `companyId`, `teamId`, `name`, `key`, `status`, `projectManagerId`, `taskCounter` | Unique `(companyId, key)` |
 | `ProjectMember` | `projectId`, `userId` | Unique `(projectId, userId)` |
-| `Task` | `companyId`, `projectId`, `number`, `title`, `description`, `status`, `priority`, `assigneeId`, `createdById`, `dueDate` | Unique `(projectId, number)` |
+| `Task` | `companyId`, `projectId`, `number`, `title`, `description`, `status`, `priority`, `assigneeId`, `createdById`, `dueDate`, `parentId` | Unique `(projectId, number)`. `parentId` makes a subtask: one level deep, same project; deleting the parent keeps its subtasks |
 | `Comment` | `companyId`, `taskId`, `userId`, `content` | |
 | `Activity` | `companyId`, `userId`, `entityType`, `entityId`, `action`, `metadata` (JSONB), `projectId`, `teamId` | Append-only |
 
@@ -264,6 +264,7 @@ The rules are expressed as escaped SQL subqueries, so visibility is enforced in 
 | `comment:create` | Anyone who can see the project, except Viewers |
 | `activity:read_company` | CEO, Tech Lead |
 | `ai:summarize` | Project summary: anyone who can see the project. Team summary: full access or members of that team. Company digest: CEO, Tech Lead |
+| `ai:breakdown` | Same as `task:create`: full access, the project's manager, a Team Lead on the project's team |
 
 The UI asks the same function which controls to show, so hidden buttons and server checks always agree. Crafting a request by hand still hits the server-side check.
 
@@ -393,6 +394,8 @@ All endpoints return JSON. Successful responses use `{ data: … }`; errors use 
 | PATCH | `/api/tasks/:id/assignee` | Assign `{ assigneeId \| null }` | `task:assign` |
 | GET | `/api/tasks/:id/comments` | List comments | `task:read` |
 | POST | `/api/tasks/:id/comments` | Add `{ content }` | `comment:create` |
+| POST | `/api/tasks/:id/breakdown` | AI-suggested subtasks; saves nothing | `ai:breakdown` |
+| POST | `/api/tasks/:id/subtasks` | Create `{ subtasks: [{ title, description?, priority? }], aiAssisted }`, 1–10, all or none | `task:create` |
 
 ### Other
 
@@ -401,7 +404,7 @@ All endpoints return JSON. Successful responses use `{ data: … }`; errors use 
 | GET | `/api/dashboard` | Role-aware stats, my tasks, projects, recent activity |
 | GET | `/api/activity?limit&cursor&projectId&teamId` | Paginated activity feed |
 | GET | `/api/search?q=` | Projects (name or exact key), tasks (title or `KEY-n`), teams |
-| GET | `/api/projects/:id/summary?period&refresh` | AI summary of a project ([21](#21-ai-summaries)) |
+| GET | `/api/projects/:id/summary?period&refresh` | AI summary of a project ([21](#21-ai-features)) |
 | GET | `/api/teams/:id/summary?period&refresh` | AI summary of a team |
 | GET | `/api/summary?period&refresh` | AI company digest (leadership) |
 | GET | `/api/health` | PostgreSQL and Redis connectivity |
@@ -628,7 +631,11 @@ Checklist:
 
 ---
 
-## 21. AI summaries
+## 21. AI features
+
+Two features share one AI layer (`lib/ai`): standup summaries and task breakdown. Both are hidden when no `GEMINI_API_KEY` is set.
+
+### Standup summaries
 
 A standup summary of what was done, what is in progress and what looks blocked, for a project (Summary tab), a team (team page) or the whole company (dashboard digest). Periods: last 24 hours or last 7 days.
 
@@ -653,6 +660,17 @@ The model receives those lists and returns a headline plus one note per task key
 
 **API:** `GET /api/projects/:id/summary`, `GET /api/teams/:id/summary`, `GET /api/summary` (company), each with `?period=day|week` and optional `refresh=1`.
 
+### Task breakdown
+
+On a top-level task, **Break down with AI** suggests 3–8 subtasks; **Add subtasks** opens the same editor empty.
+
+1. `POST /api/tasks/:id/breakdown` (`services/breakdown.service.ts`) sends the project's name and description, the task's title, description and priority, and the titles of existing subtasks. It saves nothing.
+2. The reply is validated with the same limits as a hand-made task (title ≤ 140). Suggestions that repeat each other, an existing subtask or the parent are dropped. The model never assigns people or dates.
+3. The person edits, unticks, removes or adds rows (up to 10), then creates them.
+4. `POST /api/tasks/:id/subtasks` re-checks `task:create` and creates them in one transaction: each gets the next project number and a `TASK_CREATED` activity with `parentKey` and `aiAssisted`, so the log reads "created PAY-12 as a subtask of PAY-8 (from AI suggestions)".
+
+**Who:** `ai:breakdown` matches `task:create`, since suggestions are only useful to someone who can create the result. Members and Viewers see the subtask list but not the buttons, and the API answers 403. A subtask cannot be broken down or given subtasks (400).
+
 ---
 
 ## 22. Scope and future work
@@ -663,7 +681,8 @@ Natural next steps, each a straightforward extension of the existing pipeline:
 
 - Invitations and user management inside a company
 - Notifications (in-app, then email) driven by the activity log
-- Task labels, subtasks and ordering within a column
+- Task labels and ordering within a column
+- Similar past tasks as examples for task breakdown (vector search with pgvector), filtered by the same visibility rules
 - Full-text search on PostgreSQL (`tsvector`)
 - Rate limiting on sign-in
 - Automated test suite and CI

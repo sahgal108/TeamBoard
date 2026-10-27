@@ -19,6 +19,7 @@ const MESSAGES: Partial<Record<Action, string>> = {
   "comment:create": "Viewers cannot comment",
   "activity:read_company": "Company-wide activity is only available to leadership",
   "ai:summarize": "Summaries are available to people who can see all of what they cover",
+  "ai:breakdown": "Only the project manager, the team lead or company leadership can break a task into subtasks",
 };
 
 /**

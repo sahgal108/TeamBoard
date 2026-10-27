@@ -42,3 +42,16 @@ export const createCommentSchema = z.object({
   content: z.string().trim().min(1).max(2000),
 });
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+
+export const subtaskDraftSchema = z.object({
+  title: z.string().trim().min(1).max(140),
+  description: z.string().trim().max(1000).optional().nullable(),
+  priority: taskPrioritySchema.optional(),
+});
+
+export const createSubtasksSchema = z.object({
+  subtasks: z.array(subtaskDraftSchema).min(1).max(10),
+  /** The drafts started as AI suggestions (recorded on each subtask's activity). */
+  aiAssisted: z.boolean().default(false),
+});
+export type CreateSubtasksInput = z.infer<typeof createSubtasksSchema>;
