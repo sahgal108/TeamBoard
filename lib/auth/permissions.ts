@@ -23,7 +23,8 @@ export type Action =
   | "task:edit"
   | "task:delete"
   | "comment:create"
-  | "activity:read_company";
+  | "activity:read_company"
+  | "ai:summarize";
 
 /** Facts about the caller's relationship to the resource. Loaded by lib/authorization/*, never here. */
 export type Facts = {
@@ -106,5 +107,12 @@ export function can(ctx: PolicyContext, action: Action, facts: Facts = {}): bool
 
     case "activity:read_company":
       return full;
+
+    // AI summary of a project, a team or the whole company. The facts describe the scope:
+    // project facts → anyone who can see the project; team facts → members of that team
+    // (they see all of its projects, so one shared summary leaks nothing); no facts → company
+    // scope, leadership only. A PM outside the team sees only some of its projects, so no team summary.
+    case "ai:summarize":
+      return full || canSee(facts);
   }
 }

@@ -4,7 +4,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ProjectsTable } from "@/components/tables/projects-table";
 import { TeamActions } from "@/components/teams/team-actions";
 import { TeamMembersPanel } from "@/components/teams/team-members-panel";
+import { SummaryPanel } from "@/components/ai/summary-panel";
+import { aiEnabled } from "@/lib/ai/provider";
 import { can } from "@/lib/auth/permissions";
+import { teamFacts } from "@/lib/authorization/team-access";
 import { forPage, requireCompanyContext } from "@/lib/page-guard";
 import { getTeam } from "@/services/team.service";
 import { space } from "@/lib/design-system";
@@ -22,6 +25,8 @@ export default async function TeamPage({ params }: Props) {
   const ctx = await requireCompanyContext();
   const { id } = await params;
   const team = await forPage(() => getTeam(ctx, id));
+  // Only people who see every project in the team get its summary (see `ai:summarize`).
+  const showSummary = aiEnabled() && can(ctx, "ai:summarize", await teamFacts(ctx, team.id));
   const projects = team.projects.map(p => ({
     id: p.id,
     name: p.name,
@@ -39,6 +44,12 @@ export default async function TeamPage({ params }: Props) {
         subtitle={team.description ?? `${team.members.length} members · ${team.projects.length} projects you can see`}
         actions={<TeamActions team={{ id: team.id, name: team.name, description: team.description }} canEdit={team.permissions.canEdit} canDelete={can(ctx, "team:delete")} hasProjects={team.projects.length > 0} />}
       />
+
+      {showSummary && team.projects.length > 0 && (
+        <Card title="Team summary">
+          <SummaryPanel endpoint={`/api/teams/${team.id}/summary`} showProject />
+        </Card>
+      )}
 
       <Row gutter={[space[5], space[5]]}>
         <Col xs={24} xl={16}>

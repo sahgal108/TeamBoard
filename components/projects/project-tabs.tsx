@@ -3,15 +3,18 @@
 import { Tabs } from "antd";
 import { useRouter } from "next/navigation";
 
-/** Board / Activity switch for a project; the active tab is in the URL so the server renders it. */
-export function ProjectTabs({ projectId, active }: { projectId: string; active: "board" | "activity" }) {
+export type ProjectTab = "board" | "summary" | "activity";
+
+/** Board / Summary / Activity switch for a project; the active tab is in the URL so the server renders it. */
+export function ProjectTabs({ projectId, active, showSummary }: { projectId: string; active: ProjectTab; showSummary: boolean }) {
   const router = useRouter();
   return (
     <Tabs
       activeKey={active}
-      onChange={key => router.push(key === "activity" ? `/projects/${projectId}?tab=activity` : `/projects/${projectId}`)}
+      onChange={key => router.push(key === "board" ? `/projects/${projectId}` : `/projects/${projectId}?tab=${key}`)}
       items={[
         { key: "board", label: "Board" },
+        ...(showSummary ? [{ key: "summary", label: "Summary" }] : []),
         { key: "activity", label: "Activity" },
       ]}
       style={{ marginBottom: -16 }}

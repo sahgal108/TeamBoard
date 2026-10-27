@@ -18,6 +18,7 @@ const MESSAGES: Partial<Record<Action, string>> = {
   "task:delete": "Only the project manager or company leadership can delete tasks",
   "comment:create": "Viewers cannot comment",
   "activity:read_company": "Company-wide activity is only available to leadership",
+  "ai:summarize": "Summaries are available to people who can see all of what they cover",
 };
 
 /**

@@ -84,6 +84,7 @@ All use the password `Password123!`.
 5. **Tenant isolation:** as Acme's CEO, `GET /api/projects/<globex-project-id>` returns 404.
 6. **Real-time:** two windows (Amit and Neha) on the same board. Amit moves a card; Neha's board updates without a refresh. Path: DB transaction → Activity row → `PUBLISH project:{id}` → Socket.IO room.
 7. **Cache:** call `/api/dashboard` twice and watch the `x-cache` header go `MISS` → `HIT`; change a task; next call is `MISS`.
+8. **AI summary** (needs `GEMINI_API_KEY`): open a project's Summary tab for done / in progress / looks blocked. The lists come from SQL; the model only writes the wording, so it cannot invent or leak a task. As the PM, the Engineering team page has no team summary, because she cannot see all of that team's projects.
 
 ## Cache benchmark
 
@@ -98,7 +99,7 @@ The gain is deliberately modest: only the company-wide counts are cached because
 
 ## Deployment
 
-See [docs/deploy.md](docs/deploy.md): Vercel for the Next.js app, a managed Postgres and Redis, and the Socket.IO relay as a small always-on service (it cannot run on serverless).
+Full project documentation: [docs/PROJECT.md](docs/PROJECT.md). Hosting: [docs/deploy.md](docs/deploy.md): Vercel for the Next.js app, a managed Postgres and Redis, and the Socket.IO relay as a small always-on service (it cannot run on serverless).
 
 ## Out of scope, by design
 

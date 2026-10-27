@@ -1,10 +1,13 @@
 import { Badge, Card, Col, Row, Statistic } from "antd";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SummaryPanel } from "@/components/ai/summary-panel";
 import { ActivityFeed } from "@/components/activity/activity-feed";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectsTable } from "@/components/tables/projects-table";
 import { Text } from "@/components/ui/antd";
+import { aiEnabled } from "@/lib/ai/provider";
+import { can } from "@/lib/auth/permissions";
 import { roleLabel } from "@/lib/auth/role-label";
 import { requireCompanyContext } from "@/lib/page-guard";
 import { getDashboard } from "@/services/dashboard.service";
@@ -44,6 +47,13 @@ export default async function DashboardPage() {
         <Col xs={12} xl={6}><Tile label="Tasks" value={s.tasks} detail={`${s.inReview} in review · ${s.urgentOpen} urgent open`} /></Col>
         <Col xs={12} xl={6}><Tile label="Done" value={s.done} detail={`${donePct}% of ${d.scope === "company" ? "all" : "your"} tasks`} accent /></Col>
       </Row>
+
+      {/* Company digest: leadership only (`ai:summarize` with no facts). */}
+      {aiEnabled() && can(ctx, "ai:summarize") && (
+        <Card title="Company digest">
+          <SummaryPanel endpoint="/api/summary" defaultPeriod="week" showProject />
+        </Card>
+      )}
 
       <Row gutter={[space[5], space[5]]}>
         <Col xs={24} xl={16}>

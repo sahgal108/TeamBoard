@@ -1,16 +1,18 @@
 import { Card, Flex, Progress, Space } from "antd";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SummaryPanel } from "@/components/ai/summary-panel";
 import { ActivityFeed } from "@/components/activity/activity-feed";
 import { LoadMoreActivity } from "@/components/activity/load-more-activity";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectActions } from "@/components/projects/project-actions";
-import { ProjectTabs } from "@/components/projects/project-tabs";
+import { ProjectTabs, type ProjectTab } from "@/components/projects/project-tabs";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
 import { Text } from "@/components/ui/antd";
 import { AvatarStack, PersonCell } from "@/components/ui/avatar";
 import { ProjectStatusPill } from "@/components/ui/badges";
+import { aiEnabled } from "@/lib/ai/provider";
 import { forPage, requireCompanyContext } from "@/lib/page-guard";
 import { listActivity } from "@/services/activity.service";
 import { getProject } from "@/services/project.service";
@@ -30,10 +32,12 @@ export default async function ProjectPage({ params, searchParams }: Props) {
   const ctx = await requireCompanyContext();
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   const { summary: p, permissions } = await forPage(() => getProject(ctx, id));
-  const activityTab = tab === "activity";
+  // Anyone who can open the project may read its summary (`ai:summarize` with project facts).
+  const showSummary = aiEnabled();
+  const active: ProjectTab = tab === "activity" ? "activity" : tab === "summary" && showSummary ? "summary" : "board";
   const [tasks, activity] = await Promise.all([
-    activityTab ? Promise.resolve([]) : listTasks(ctx, { projectId: p.id }),
-    activityTab ? listActivity(ctx, { projectId: p.id, limit: 20 }) : Promise.resolve(null),
+    active === "board" ? listTasks(ctx, { projectId: p.id }) : Promise.resolve([]),
+    active === "activity" ? listActivity(ctx, { projectId: p.id, limit: 20 }) : Promise.resolve(null),
   ]);
 
   return (
@@ -65,10 +69,14 @@ export default async function ProjectPage({ params, searchParams }: Props) {
           </>
         }
       >
-        <ProjectTabs projectId={p.id} active={activityTab ? "activity" : "board"} />
+        <ProjectTabs projectId={p.id} active={active} showSummary={showSummary} />
       </PageHeader>
 
-      {activityTab && activity ? (
+      {active === "summary" ? (
+        <Card>
+          <SummaryPanel endpoint={`/api/projects/${p.id}/summary`} />
+        </Card>
+      ) : active === "activity" && activity ? (
         <Card styles={{ body: { padding: 0 } }}>
           <ActivityFeed items={activity.items} showProject={false} empty="Nothing has happened in this project yet." />
           <LoadMoreActivity initialCursor={activity.nextCursor} projectId={p.id} />
